@@ -1,0 +1,23 @@
+{block 0}
+define(num1) compileshort(4) compileword(;)
+define(num2) compileshort(3) compileshort(7) compileword(;)
+execute(num1)
+execute(num2)
+executeshort(1) executeshort(2) execute(+)
+{block 1}
+{block 2}
+define(square) compileword(dup) compileword(*) compileword(;)
+executeshort(5) execute(square)
+{block 3}
+{block 4}
+variable(age) compileword(0)
+executeshort(42) execute(age) execute(!)
+execute(age) execute(@) execute(.)
+{block 5}
+{block 6}
+define(if) compilemacro(0branch) compileword(here) compileshort(0) compileword(;)
+define(then) compileword(here) compileword(swap) compileword(!) compileword(;)
+define(for) compileword(here) compilemacro(+r) compileword(;)
+define(next) compilemacro(r-) compilemacro(1-) compilemacro(dup) compilemacro(+r) compilemacro(0) compilemacro(ne) compilemacro(0branch) compileword(,) compilemacro(rdrop) compileword(;)
+executeshort(5) execute(for) execute(i) execute(.) execute(next)
+{block 7}
