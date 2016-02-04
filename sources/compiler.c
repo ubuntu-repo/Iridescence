@@ -23,6 +23,7 @@
 #define MACRO_DICTIONARY false
 
 #define IN_BETWEEN 1 // Point out that the word list's endpoint isn't reached
+#define TRUE -1      // For forth -1 is traditionally considered as true
 
 /*
  * Data types
@@ -66,7 +67,7 @@ unsigned long *code_here;
 unsigned long *h;	                // Code is inserted here
 bool          selected_dictionary;
 unsigned long memory_location;
-bool          keep_executing; 
+bool          keep_executing;
 
 LIST_HEAD(, word_entry) forth_dictionary; 
 LIST_HEAD(, word_entry) macro_dictionary;
@@ -209,7 +210,8 @@ unpack(cell_t word)
 void comma(void)
 {
 	*h = stack_pop();
-	printf("\t, Executed: h at: %p, pointing to %p, TOS = %x\n", h, (void *)*h, (unsigned int)*(tos));
+	printf("\t, Comma: h at: %p, pointing to %p, TOS = %x\n", h, (void *)*h, 
+			(unsigned int)*(tos));
 	h++;
 }
 
@@ -252,7 +254,9 @@ void exit_word(void)
 
 	n = rpop();
 
-	if (rtos == start_of(rstack))
+	if (!(rtos == start_of(rstack)) && n == IN_BETWEEN)
+		keep_executing = false;
+	else if (rtos == start_of(rstack))
 		keep_executing = false;
 	else if (n == IN_BETWEEN)
 		keep_executing = true;
@@ -421,12 +425,12 @@ void dump_dict(void)
 
 	LIST_FOREACH(item, &forth_dictionary, next)
 	{
-		printf("word: %x, code:%p\n", (int)item->name, item->code_address);
+		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
 	}
 
 	LIST_FOREACH(item, &macro_dictionary, next)
 	{
-		printf("word: %x, code:%p\n", (int)item->name, item->code_address);
+		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
 	}
 }
 
@@ -437,10 +441,35 @@ void here(void)
 
 void zero_branch(void)
 {
-	if (stack_pop() == 0)
-		memory_location = *(unsigned long *)memory_location;
-	else
+	cell_t n = stack_pop();
+
+	if (n == TRUE)
+	{
 		memory_location += sizeof(unsigned long);
+	}
+	else
+	{
+		memory_location += sizeof(unsigned long);
+		memory_location = *(unsigned long *)memory_location;
+	}
+
+}
+
+void if_(void)
+{
+	stack_push((cell_t)zero_branch);
+	comma();
+
+	here();
+	stack_push(0);
+	comma();
+}
+
+void then(void)
+{
+	here();
+	swap();
+	store();
 }
 
 void to_r(void)
@@ -472,15 +501,6 @@ void dot(void)
 void minus_one(void)
 {
 	*tos -= 1; 
-}
-
-void zero(void)
-{
-	stack_push((cell_t)literal);
-	comma();
-
-	stack_push(0);
-	comma();
 }
 
 void i_word(void)
@@ -545,7 +565,8 @@ lookup_word(cell_t name, const bool force_dictionary)
 	return NULL;
 }
 
-static void call_word(void)
+static void 
+call_word(void)
 {
 	rpush(IN_BETWEEN);
 }
@@ -693,25 +714,28 @@ static void
 insert_builtins_into_macro_dictionary(void)
 {
 	struct word_entry *_zero_branch, *_to_r, *_from_r, *_rdrop,
-					  *_minus_one, *_zero, *_ne;
+					  *_minus_one, *_ne, *_swap,
+					  *_if, *_then;
 
 	_zero_branch = calloc(1, sizeof(struct word_entry));
 	_to_r        = calloc(1, sizeof(struct word_entry));
 	_from_r      = calloc(1, sizeof(struct word_entry));
 	_rdrop       = calloc(1, sizeof(struct word_entry));
 	_minus_one   = calloc(1, sizeof(struct word_entry));
-	_zero        = calloc(1, sizeof(struct word_entry));
 	_ne          = calloc(1, sizeof(struct word_entry));
+	_swap        = calloc(1, sizeof(struct word_entry));
+	_if          = calloc(1, sizeof(struct word_entry));
+	_then        = calloc(1, sizeof(struct word_entry));
 
 	if (!_zero_branch || !_to_r || !_from_r || !_rdrop || !_minus_one
-			|| !_zero || !_ne)
+			|| !_ne || !_swap || !_if || !_then)
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
 		exit(EXIT_FAILURE);
 	}
 
-	_zero_branch->name         = pack("0branch");
+	_zero_branch->name         = pack("zb");
 	_zero_branch->is_builtin   = true;
 	_zero_branch->code_address = zero_branch;
 	_zero_branch->codeword     = &(_zero_branch->code_address);
@@ -736,24 +760,35 @@ insert_builtins_into_macro_dictionary(void)
 	_minus_one->code_address   = minus_one;
 	_minus_one->codeword       = &(_minus_one->code_address);
 
-	_zero->name                = pack("0");
-	_zero->is_builtin          = true;
-	_zero->code_address        = zero;
-	_zero->codeword            = &(_zero->code_address);
-
 	_ne->name                  = pack("ne");
 	_ne->is_builtin            = true;
 	_ne->code_address          = ne;
 	_ne->codeword              = &(_ne->code_address);
+
+	_swap->name                = pack("swap");
+	_swap->is_builtin          = true;
+	_swap->code_address        = swap;
+	_swap->codeword            = &(_swap->code_address);
+
+	_if->name                  = pack("if");
+	_if->is_builtin            = true;
+	_if->code_address          = if_;
+	_if->codeword              = &(_if->code_address);
+
+	_then->name                = pack("then");
+	_then->is_builtin          = true;
+	_then->code_address        = then;
+	_then->codeword            = &(_then->code_address);
 
 	LIST_INSERT_HEAD(&macro_dictionary, _zero_branch, next);
 	LIST_INSERT_HEAD(&macro_dictionary, _to_r,        next);
 	LIST_INSERT_HEAD(&macro_dictionary, _from_r,      next);
 	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,       next);
 	LIST_INSERT_HEAD(&macro_dictionary, _minus_one,   next);
-	LIST_INSERT_HEAD(&macro_dictionary, _zero,        next);
 	LIST_INSERT_HEAD(&macro_dictionary, _ne,          next);
-
+	LIST_INSERT_HEAD(&macro_dictionary, _swap,        next);
+	LIST_INSERT_HEAD(&macro_dictionary, _if,          next);
+	LIST_INSERT_HEAD(&macro_dictionary, _then,        next);
 }
 
 void
@@ -770,9 +805,6 @@ literal(void)
 
 	// Push the number on the stack
 	stack_push(n);
-
-	// Skip number's location
-	memory_location += sizeof(unsigned long);
 }
 
 void
@@ -800,8 +832,11 @@ execute(struct word_entry *word)
 
 	while (keep_executing)
 	{
-		printf("Executing: %lx ->%x\n", memory_location, 
-				*(cell_t *)memory_location);
+		printf("Executing: %lx -> %x -> %x\n", memory_location, 
+				*(cell_t *)memory_location,
+				*(cell_t *)*(cell_t *)memory_location);
+
+
 		
 		((FUNCTION_EXEC)*(cell_t *)memory_location)();
 
@@ -897,7 +932,8 @@ compile_word(const cell_t word)
 	if (entry)
 	{
 		// Execute macro word
-		printf("Compile Macro: name = %x, code_address = %p\n", (int)entry->name, entry->code_address);
+		printf("Execute Macro: name = %s, code_address = %p\n", 
+				unpack(entry->name), entry->code_address);
 		execute(entry);
 	}
 	else
@@ -914,10 +950,17 @@ compile_word(const cell_t word)
 				comma();
 			}
 
+			// Take into account only one indirection
+			unsigned long address = (unsigned long)entry->code_address;
+
+			if (address < 0x8040000 || address > 0x8050000)
+				address = *(unsigned *)address;
+
 			// Compile a call to that word
-			stack_push((cell_t)entry->code_address);
-			printf("To compile: %x, at address: %p\n", (int)entry->name, h);
+			stack_push((cell_t)address);
 			comma();
+			printf("To compile: %s, %x, at address: %p\n", unpack(entry->name),
+					(int)entry->name, h);
 		}
 	}
 }
@@ -951,6 +994,7 @@ compile_macro(cell_t word)
 	if (entry)
 	{
 		// Compile a call to that macro
+		printf("Macro: %s -> %lx\n", unpack(word), (unsigned long)entry->code_address);
 		stack_push((cell_t)entry->code_address);
 		comma();
 	}

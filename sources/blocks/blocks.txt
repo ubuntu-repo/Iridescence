@@ -15,9 +15,6 @@ executeshort(42) execute(age) execute(!)
 execute(age) execute(@) execute(.)
 {block 5}
 {block 6}
-define(if) compilemacro(0branch) compileword(here) compileshort(0) compileword(;)
-define(then) compileword(here) compileword(swap) compileword(!) compileword(;)
-define(for) compileword(here) compilemacro(+r) compileword(;)
-define(next) compilemacro(r-) compilemacro(1-) compilemacro(dup) compilemacro(+r) compilemacro(0) compilemacro(ne) compilemacro(0branch) compileword(,) compilemacro(rdrop) compileword(;)
-executeshort(5) execute(for) execute(i) execute(.) execute(next)
+define(abc) compileshort(-1) compileword(if) compileshort(10) compileword(then) compileword(;)
+execute(abc)
 {block 7}
