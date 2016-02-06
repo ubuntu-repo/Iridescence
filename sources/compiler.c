@@ -23,7 +23,8 @@
 #define MACRO_DICTIONARY false
 
 #define IN_BETWEEN 1 // Point out that the word list's endpoint isn't reached
-#define TRUE -1      // For forth -1 is traditionally considered as true
+#define FORTH_TRUE -1      // For forth -1 is traditionally considered as true
+#define FORTH_FALSE 0
 
 /*
  * Data types
@@ -307,7 +308,7 @@ void lt(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos < n) ? -1 : 0;
+	*tos = (*tos < n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void gt(void)
@@ -315,7 +316,7 @@ void gt(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos > n) ? -1 : 0;
+	*tos = (*tos > n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ge(void)
@@ -323,7 +324,7 @@ void ge(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos >= n) ? -1 : 0;
+	*tos = (*tos >= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ne(void)
@@ -331,7 +332,7 @@ void ne(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos != n) ? -1 : 0;
+	*tos = (*tos != n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void eq(void)
@@ -339,7 +340,7 @@ void eq(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos == n) ? -1 : 0;
+	*tos = (*tos == n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void le(void)
@@ -347,7 +348,7 @@ void le(void)
 	cell_t n;
 
 	n = stack_pop();
-	*tos = (*tos <= n) ? -1 : 0;
+	*tos = (*tos <= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void and(void) {}
@@ -443,7 +444,7 @@ void zero_branch(void)
 {
 	cell_t n = stack_pop();
 
-	if (n == TRUE)
+	if (n == FORTH_TRUE)
 	{
 		memory_location += sizeof(unsigned long);
 	}
