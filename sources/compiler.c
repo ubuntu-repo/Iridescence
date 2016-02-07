@@ -473,6 +473,28 @@ void then(void)
 	store();
 }
 
+void for_(void)
+{
+	cell_t n = stack_pop();
+
+	rpush(n);
+	here();
+}
+
+void next_(void)
+{
+	cell_t n = rpop();
+	printf("**************** NEXT: %d\n", n);
+	if (n > 0)
+	{
+		n--;
+		rpush(n);
+
+		here();
+		store();
+	}
+}
+
 void to_r(void)
 {
 	cell_t n;
@@ -716,7 +738,7 @@ insert_builtins_into_macro_dictionary(void)
 {
 	struct word_entry *_zero_branch, *_to_r, *_from_r, *_rdrop,
 					  *_minus_one, *_ne, *_swap,
-					  *_if, *_then;
+					  *_if, *_then, *_for, *_next;
 
 	_zero_branch = calloc(1, sizeof(struct word_entry));
 	_to_r        = calloc(1, sizeof(struct word_entry));
@@ -727,9 +749,11 @@ insert_builtins_into_macro_dictionary(void)
 	_swap        = calloc(1, sizeof(struct word_entry));
 	_if          = calloc(1, sizeof(struct word_entry));
 	_then        = calloc(1, sizeof(struct word_entry));
+	_for         = calloc(1, sizeof(struct word_entry));
+	_next        = calloc(1, sizeof(struct word_entry));
 
 	if (!_zero_branch || !_to_r || !_from_r || !_rdrop || !_minus_one
-			|| !_ne || !_swap || !_if || !_then)
+			|| !_ne || !_swap || !_if || !_then || !_for || !_next)
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
@@ -781,6 +805,16 @@ insert_builtins_into_macro_dictionary(void)
 	_then->code_address        = then;
 	_then->codeword            = &(_then->code_address);
 
+	_for->name                 = pack("for");
+	_for->is_builtin           = true;
+	_for->code_address         = for_;
+	_for->codeword             = &(_for->code_address);
+
+	_next->name                = pack("next");
+	_next->is_builtin          = true;
+	_next->code_address        = next_;
+	_next->codeword            = &(_next->code_address);
+
 	LIST_INSERT_HEAD(&macro_dictionary, _zero_branch, next);
 	LIST_INSERT_HEAD(&macro_dictionary, _to_r,        next);
 	LIST_INSERT_HEAD(&macro_dictionary, _from_r,      next);
@@ -790,6 +824,8 @@ insert_builtins_into_macro_dictionary(void)
 	LIST_INSERT_HEAD(&macro_dictionary, _swap,        next);
 	LIST_INSERT_HEAD(&macro_dictionary, _if,          next);
 	LIST_INSERT_HEAD(&macro_dictionary, _then,        next);
+	LIST_INSERT_HEAD(&macro_dictionary, _for,         next);
+	LIST_INSERT_HEAD(&macro_dictionary, _next,        next);
 }
 
 void
@@ -1090,7 +1126,7 @@ int main(int argc, char *argv[])
 	colorforth_initialize();
 
 	// Load block 0
-	stack_push(0);
+	stack_push(8);
 	load();
 
 	dot_s();

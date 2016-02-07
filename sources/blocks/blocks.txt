@@ -18,3 +18,7 @@ execute(age) execute(@) execute(.)
 define(abc) compileshort(-1) compileword(if) compileshort(10) compileword(then) compileword(;)
 execute(abc)
 {block 7}
+{block 8}
+define(loop) compileshort(5) compileword(for) compileshort(3) compileword(next) compileword(;)
+execute(loop)
+{block 9}
