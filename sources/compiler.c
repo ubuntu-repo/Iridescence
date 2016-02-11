@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Konstantin Tcholokachvili
+ * Copyright (c) 2015-2016 Konstantin Tcholokachvili
  * All rights reserved.
  * Use of this source code is governed by a MIT license that can be 
  * found in the LICENSE file.
@@ -22,8 +22,7 @@
 #define FORTH_DICTIONARY true
 #define MACRO_DICTIONARY false
 
-#define IN_BETWEEN 1 // Point out that the word list's endpoint isn't reached
-#define FORTH_TRUE -1      // For forth -1 is traditionally considered as true
+#define FORTH_TRUE -1      // In Forth world -1 means true
 #define FORTH_FALSE 0
 
 /*
@@ -36,7 +35,6 @@ struct word_entry
 	cell_t                 name;
 	void                  *code_address;
 	void                  *codeword;
-	bool                   is_builtin;
 	LIST_ENTRY(word_entry) next;
 };
 
@@ -50,7 +48,6 @@ typedef void (*FUNCTION_EXEC)(void);
 #define nos           tos[-1]	// Next On Stack
 #define rpush(x)      *(++rtos) = x
 #define rpop()        *(rtos--)
-#define rnos          rtos[-1]
 #define start_of(x)   (&x[0])
 
 /* Data stack */
@@ -67,54 +64,35 @@ unsigned long *rtos = start_of(rstack);
 unsigned long *code_here;
 unsigned long *h;	                // Code is inserted here
 bool          selected_dictionary;
-unsigned long memory_location;
-bool          keep_executing;
+cell_t        *blocks;				// Manage looping over the code contained in blocks
 
-LIST_HEAD(, word_entry) forth_dictionary; 
+LIST_HEAD(, word_entry) forth_dictionary;
 LIST_HEAD(, word_entry) macro_dictionary;
 
-/* Manage looping over the code contained in blocks */
-cell_t *blocks;
-unsigned long i;
+/*
+ * Forth traditional registers
+ */
+unsigned long *P;
+unsigned long *W;
+unsigned long *I;
 
 /*
  * Prototypes
  */
-static void do_word(cell_t word);
 static void ignore(const cell_t word);
-static void compile_number(const cell_t number);
-static void compile_big_number(const cell_t number);
-static void variable_word(cell_t word);
-static void compile_macro(const cell_t word);
 static void interpret_forth_word(const cell_t word);
 static void interpret_big_number(const cell_t number);
-static void interpret_number(const cell_t number);
-static void compile_word(const cell_t word);
 static void create_word(cell_t word);
+static void compile_word(const cell_t word);
+static void compile_big_number(const cell_t number);
+static void compile_number(const cell_t number);
+static void compile_macro(const cell_t word);
+static void interpret_number(const cell_t number);
+static void variable_word(const cell_t word);
 static void literal(void);
-
-/*
- * Execution helpers
- */
-
-void
-run_block(cell_t n)
-{
-	unsigned long start, limit;
-
-	start = n * 256;     // Start executing block from here...
-	limit = (n+1) * 256; // to this point.
-
-	for (i = start; i < limit-1; i++)
-	{
-		/* Is the end of block reached? If so return.
-		   By the way, don't confuse with variables defaulting to 0 */
-		if (blocks[i] == 0 && blocks[i+1] == 0)
-			return;
-
-		do_word(blocks[i]);
-	}
-}
+static void run_block(const cell_t word);
+static void colorforth_initialize(void);
+static void colorforth_finalize(void);
 
 
 /* Word extensions (0), comments (9, 10, 11, 15), compiler feedback (13)
@@ -129,7 +107,7 @@ void (*color_word_action[16])() = {ignore, interpret_forth_word,
  */
 char *code = " rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?";
 
-int get_code_index(char letter)
+int get_code_index(const char letter)
 {
 	// Get the index of a character in the 'code' sequence.
 	return strchr(code, letter) - code;
@@ -161,9 +139,9 @@ pack(const char *word_name)
 }
 
 char *
-unpack(cell_t word)
+unpack(const cell_t word)
 {
-	unsigned char nybble;
+	unsigned char nibble;
 	static char text[16];
 	unsigned int coded, bits, i;
 
@@ -176,23 +154,23 @@ unpack(cell_t word)
 
 	while (coded)
 	{
-		nybble = coded >> 28;
+		nibble = coded >> 28;
 		coded  = (coded << 4) & MASK;
 		bits  -= 4;
 
-		if (nybble < 0x8)
+		if (nibble < 0x8)
 		{
-			text[i] += code[nybble];
+			text[i] += code[nibble];
 		}
-		else if (nybble < 0xc)
+		else if (nibble < 0xc)
 		{
-			text[i] += code[(((nybble^0xc) << 1) | ((coded&HIGHBIT) > 0))];
+			text[i] += code[(((nibble^0xc) << 1) | ((coded&HIGHBIT) > 0))];
 			coded    = (coded << 1) & MASK;
 			bits    -= 1;
 		}
 		else
 		{
-			text[i] += code[(coded >> 29) + (8 * (nybble - 10))];
+			text[i] += code[(coded >> 29) + (8 * (nibble - 10))];
 			coded    = (coded << 3) & MASK;
 			bits    -= 3;
 		}
@@ -205,9 +183,37 @@ unpack(cell_t word)
 
 
 /*
+ * Threading words
+ */
+void next(void)
+{
+	printf("P: %lx -> %lx\n", (unsigned long)P, *(P));
+	W =  I;
+	I++;
+	P = W;
+	printf("P: %lx -> %lx\n", (unsigned long)P, *(P));
+	((FUNCTION_EXEC)*P)();
+}
+
+void docol(void)
+{
+	rpush((cell_t)I);
+	I = W + 1;
+	printf("DOCOL: W=%lx, I=%lx\n", (unsigned long)W, (unsigned long)I);
+	next();
+}
+
+void dosemi(void)
+{
+	printf("DOSEMI");
+	*I = rpop();
+	next();
+}
+
+
+/*
  * Built-in words
  */
-
 void comma(void)
 {
 	*h = stack_pop();
@@ -252,15 +258,10 @@ void macro(void)
 void exit_word(void)
 {
 	cell_t n;
-
+printf(" => Exit\n");
 	n = rpop();
+	(void)n;
 
-	if (!(rtos == start_of(rstack)) && n == IN_BETWEEN)
-		keep_executing = false;
-	else if (rtos == start_of(rstack))
-		keep_executing = false;
-	else if (n == IN_BETWEEN)
-		keep_executing = true;
 }
 
 void add(void)
@@ -362,12 +363,13 @@ void dup_word(void)
 
 	n = *tos;
 	stack_push(n);
+
+	next();
 }
 
 void drop(void)
 {
-	// Cast to void to avoid a warning about not used computed value.
-	(void)stack_pop();
+	(void)stack_pop(); // Cast to avoid a warning about not used computed value
 }
 
 void over(void)
@@ -445,15 +447,11 @@ void zero_branch(void)
 	cell_t n = stack_pop();
 
 	if (n == FORTH_TRUE)
-	{
-		memory_location += sizeof(unsigned long);
-	}
+		I++;
 	else
-	{
-		memory_location += sizeof(unsigned long);
-		memory_location = *(unsigned long *)memory_location;
-	}
-
+		I = (unsigned long *)*I;
+	
+	next();
 }
 
 void if_(void)
@@ -484,7 +482,7 @@ void for_(void)
 void next_(void)
 {
 	cell_t n = rpop();
-	printf("**************** NEXT: %d\n", n);
+	
 	if (n > 0)
 	{
 		n--;
@@ -538,13 +536,10 @@ void i_word(void)
 /*
  * Helper functions
  */
-
 static void
-do_word(cell_t word)
+do_word(const cell_t word)
 {
-	uint8_t color;
-
-	color = (int)word & 0x0000000f;
+	uint8_t color = (int)word & 0x0000000f;
 	
 	if (color == 2 || color == 5 || color == 6 || color == 8 || color == 15)
 	{
@@ -558,6 +553,25 @@ do_word(cell_t word)
 	}
 	
 	(*color_word_action[color])(word);
+}
+
+void
+run_block(const cell_t n)
+{
+	unsigned long start, limit, i;
+
+	start = n * 256;     // Start executing block from here...
+	limit = (n+1) * 256; // ...to this point.
+
+	for (i = start; i < limit-1; i++)
+	{
+		/* Is the end of block reached? If so return.
+		   By the way, don't confuse with variables defaulting to 0 */
+		if (blocks[i] == 0 && blocks[i+1] == 0)
+			return;
+
+		do_word(blocks[i]);
+	}
 }
 
 struct word_entry *
@@ -586,12 +600,6 @@ lookup_word(cell_t name, const bool force_dictionary)
 	}
 
 	return NULL;
-}
-
-static void 
-call_word(void)
-{
-	rpush(IN_BETWEEN);
 }
 
 static void
@@ -630,89 +638,62 @@ insert_builtins_into_forth_dictionary(void)
 	}
 
 	_comma->name             = pack(",");
-	_comma->is_builtin       = true;
 	_comma->code_address     = comma;
-	_comma->codeword         = &(_comma->code_address);
 
 	_load->name              = pack("load");
-	_load->is_builtin        = true;
 	_load->code_address      = load;
-	_load->codeword          = &(_load->code_address);
 	
 	_loads->name             = pack("loads");
-	_loads->is_builtin       = true;
 	_loads->code_address     = loads;
-	_loads->codeword         = &(_loads->code_address);
 
 	_forth->name             = pack("forth");
-	_forth->is_builtin       = true;
 	_forth->code_address     = forth;
-	_forth->codeword         = &(_forth->code_address);
 
 	_macro->name             = pack("macro");
-	_macro->is_builtin       = true;
 	_macro->code_address     = macro;
-	_macro->codeword         = &(_macro->code_address);
 
 	_exit_word->name         = pack(";");
-	_exit_word->is_builtin   = true;
 	_exit_word->code_address = exit_word;
 	_exit_word->codeword     = &(_exit_word->code_address);
 
 	_store->name             = pack("!");
-	_store->is_builtin       = true;
 	_store->code_address     = store;
 	_store->codeword         = &(_store->code_address);
 
 	_fetch->name             = pack("@");
-	_fetch->is_builtin       = true;
 	_fetch->code_address     = fetch;
 	_fetch->codeword         = &(_fetch->code_address);
 
 	_add->name               = pack("+");
-	_add->is_builtin         = true;
 	_add->code_address       = add;
 	_add->codeword           = &(_add->code_address);
 
 	_sub->name               = pack("-");
-	_sub->is_builtin         = true;
 	_sub->code_address       = sub;
-	_sub->codeword           = &(_sub->code_address);
 
 	_mult->name              = pack("*");
-	_mult->is_builtin        = true;
 	_mult->code_address      = multiply;
 	_mult->codeword          = &(_mult->code_address);
 
 	_div->name               = pack("/");
-	_div->is_builtin         = true;
 	_div->code_address       = divide;
-	_div->codeword           = &(_div->code_address);
 
 	_ne->name                = pack("ne");
-	_ne->is_builtin          = true;
 	_ne->code_address        = ne;
-	_ne->codeword            = &(_ne->code_address);
 
 	_dup->name               = pack("dup");
-	_dup->is_builtin         = true;
 	_dup->code_address       = dup_word;
 	_dup->codeword           = &(_dup->code_address);
 
 	_dot->name               = pack(".");
-	_dot->is_builtin         = true;
 	_dot->code_address       = dot;
 	_dot->codeword           = &(_dot->code_address);
 
 	_here->name              = pack("here");
-	_here->is_builtin        = true;
 	_here->code_address      = here;
-	_here->codeword          = &(_here->code_address);
 
 	_i->name                 = pack("i");
-	_i->is_builtin           = true;
 	_i->code_address         = i_word;
-	_i->codeword             = &(_i->code_address);
 
 	LIST_INSERT_HEAD(&forth_dictionary, _comma,      next);
 	LIST_INSERT_HEAD(&forth_dictionary, _load,       next);
@@ -761,59 +742,40 @@ insert_builtins_into_macro_dictionary(void)
 	}
 
 	_zero_branch->name         = pack("zb");
-	_zero_branch->is_builtin   = true;
 	_zero_branch->code_address = zero_branch;
 	_zero_branch->codeword     = &(_zero_branch->code_address);
 
 	_to_r->name                = pack("+r");
-	_to_r->is_builtin          = true;
 	_to_r->code_address        = to_r;
-	_to_r->codeword            = &(_to_r->code_address);
 
 	_from_r->name              = pack("r-");
-	_from_r->is_builtin        = true;
 	_from_r->code_address      = from_r;
-	_from_r->codeword          = &(_from_r->code_address);
 
 	_rdrop->name               = pack("rdrop");
-	_rdrop->is_builtin         = true;
 	_rdrop->code_address       = rdrop;
-	_rdrop->codeword           = &(_rdrop->code_address);
 
 	_minus_one->name           = pack("1-");
-	_minus_one->is_builtin     = true;
 	_minus_one->code_address   = minus_one;
-	_minus_one->codeword       = &(_minus_one->code_address);
 
 	_ne->name                  = pack("ne");
-	_ne->is_builtin            = true;
 	_ne->code_address          = ne;
-	_ne->codeword              = &(_ne->code_address);
 
 	_swap->name                = pack("swap");
-	_swap->is_builtin          = true;
 	_swap->code_address        = swap;
-	_swap->codeword            = &(_swap->code_address);
 
 	_if->name                  = pack("if");
-	_if->is_builtin            = true;
 	_if->code_address          = if_;
 	_if->codeword              = &(_if->code_address);
 
 	_then->name                = pack("then");
-	_then->is_builtin          = true;
 	_then->code_address        = then;
 	_then->codeword            = &(_then->code_address);
 
 	_for->name                 = pack("for");
-	_for->is_builtin           = true;
 	_for->code_address         = for_;
-	_for->codeword             = &(_for->code_address);
 
 	_next->name                = pack("next");
-	_next->is_builtin          = true;
 	_next->code_address        = next_;
-	_next->codeword            = &(_next->code_address);
 
 	LIST_INSERT_HEAD(&macro_dictionary, _zero_branch, next);
 	LIST_INSERT_HEAD(&macro_dictionary, _to_r,        next);
@@ -834,102 +796,40 @@ literal(void)
 	cell_t n;
 
 	// Skip literal's address
-	memory_location += sizeof(unsigned long);
+	printf("Literal: %lx %lx\n", (unsigned long)I, (unsigned long)(*(cell_t *)I)>>5);
 	
 	// Fetch the number from the next cell
-	n = *(cell_t *)memory_location;
+	n = *(cell_t *)I;
 	n >>= 5;  // Make it a number again ;-)
+	printf("N = %d\n", n);
 
 	// Push the number on the stack
 	stack_push(n);
+
+	I++;
+	next();
 }
 
 void
 variable(void)
 {
-	memory_location += sizeof(unsigned long); /* Fetch the variable's address 
-									             from the next cell */
-	stack_push(memory_location); // Push it on the stack
+	I++; // Fetch the variable's address from the next cell
+	stack_push((cell_t)I); // Push it on the stack
+	W--;
 }
 
 static void
-execute(struct word_entry *word)
+execute(const struct word_entry *word)
 {
-	memory_location = (unsigned long)word->codeword;
-
-	// Only to execute a single built-in word
-	if (!keep_executing && word->is_builtin)
-	{
-		((FUNCTION_EXEC)*(cell_t *)memory_location)();
-		return;
-	}
-
-	// Execute a word made up by a list of words
-	keep_executing  = true;
-
-	while (keep_executing)
-	{
-		printf("Executing: %lx -> %x -> %x\n", memory_location, 
-				*(cell_t *)memory_location,
-				*(cell_t *)*(cell_t *)memory_location);
-
-
-		
-		((FUNCTION_EXEC)*(cell_t *)memory_location)();
-
-		memory_location += sizeof(unsigned long);
-	}
+	printf("EXEC: %lx -> %lx\n", (unsigned long)word->code_address, *(unsigned long *)word->code_address);
+	((FUNCTION_EXEC)*(unsigned long *)word->codeword)();
 }
 
-static void
-colorforth_initialize(void)
-{
-	code_here = malloc(CODE_HEAP_SIZE);
-
-	if (!code_here)
-	{
-		fprintf(stderr, "Error: Not enough memory!\n");
-		exit(EXIT_FAILURE);
-	}
-
-	h = code_here;
-
-	LIST_INIT(&forth_dictionary);
-	LIST_INIT(&macro_dictionary);
-
-	// FORTH is the default dictionary
-	forth();
-
-	insert_builtins_into_forth_dictionary();
-	insert_builtins_into_macro_dictionary();
-	dump_dict();
-}
-
-static void
-colorforth_finalize(void)
-{
-	struct word_entry *item;
-
-	while ((item = LIST_FIRST(&forth_dictionary)))
-	{
-		LIST_REMOVE(item, next);
-		free(item);
-	}
-
-	while ((item = LIST_FIRST(&macro_dictionary)))
-	{
-		LIST_REMOVE(item, next);
-		free(item);
-	}
-
-	free(code_here);
-}
 
 
 /*
  * Colorful words handling
  */
-
 static void
 ignore(const cell_t word)
 {
@@ -940,7 +840,7 @@ static void
 interpret_forth_word(const cell_t word)
 {
 	struct word_entry *entry;
-
+printf("IFW: %s\n", unpack(word));
 	entry = lookup_word(word, FORTH_DICTIONARY);
 
 	if (entry)
@@ -954,7 +854,7 @@ interpret_big_number(const cell_t number)
 }
 
 static void
-interpret_number(cell_t number)
+interpret_number(const cell_t number)
 {
 	stack_push(number >> 5);
 }
@@ -979,22 +879,8 @@ compile_word(const cell_t word)
 
 		if (entry)
 		{
-			if (!entry->is_builtin || (entry->name == (cell_t)0xf0000000))
-			{
-				/* Let the ';' know if it's the end of execution.
-				   0xfffffff0 is ';' */
-				stack_push((cell_t)call_word);
-				comma();
-			}
-
-			// Take into account only one indirection
-			unsigned long address = (unsigned long)entry->code_address;
-
-			if (address < 0x8040000 || address > 0x8050000)
-				address = *(unsigned *)address;
-
 			// Compile a call to that word
-			stack_push((cell_t)address);
+			stack_push((cell_t)entry->code_address);
 			comma();
 			printf("To compile: %s, %x, at address: %p\n", unpack(entry->name),
 					(int)entry->name, h);
@@ -1005,9 +891,6 @@ compile_word(const cell_t word)
 static void
 compile_number(const cell_t number)
 {
-	stack_push((cell_t)call_word);
-	comma();
-
 	stack_push((cell_t)literal);
 	comma();
 
@@ -1022,7 +905,7 @@ compile_big_number(const cell_t number)
 }
 
 static void
-compile_macro(cell_t word)
+compile_macro(const cell_t word)
 {
 	struct word_entry *entry;
 
@@ -1053,10 +936,14 @@ create_word(cell_t word)
 
 	word &= 0xfffffff0;
 
+	printf("docol: %p\n", docol);
 	entry->name         = word;
-	entry->is_builtin   = false;
 	entry->code_address = h;
 	entry->codeword     = h;
+
+	stack_push((cell_t)docol);
+	comma();
+
 	printf("create_word(): at %p, name = %x\n", entry->code_address, 
 			(int)entry->name);
 
@@ -1067,16 +954,12 @@ create_word(cell_t word)
 }
 
 static void
-variable_word(cell_t word)
+variable_word(const cell_t word)
 {
 	// A variable must be defined in forth dictionary
 	forth();
 
 	create_word(word);
-
-	// A marker to be handled by ';'
-	stack_push((cell_t)call_word);
-	comma();
 
 	// Variable's handler
 	stack_push((cell_t)variable);
@@ -1089,6 +972,57 @@ variable_word(cell_t word)
 	// Exit
 	stack_push((cell_t)exit_word);
 	comma();
+}
+
+/*
+ * Initializing and deinitalizing colorForth
+ */
+static void
+colorforth_initialize(void)
+{
+	code_here = malloc(CODE_HEAP_SIZE);
+
+	if (!code_here)
+	{
+		fprintf(stderr, "Error: Not enough memory!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	h = code_here;
+
+	P = h;
+	W = h;
+	I = h;
+
+	LIST_INIT(&forth_dictionary);
+	LIST_INIT(&macro_dictionary);
+
+	// FORTH is the default dictionary
+	forth();
+
+	insert_builtins_into_forth_dictionary();
+	insert_builtins_into_macro_dictionary();
+	dump_dict();
+}
+
+static void
+colorforth_finalize(void)
+{
+	struct word_entry *item;
+
+	while ((item = LIST_FIRST(&forth_dictionary)))
+	{
+		LIST_REMOVE(item, next);
+		free(item);
+	}
+
+	while ((item = LIST_FIRST(&macro_dictionary)))
+	{
+		LIST_REMOVE(item, next);
+		free(item);
+	}
+
+	free(code_here);
 }
 
 
@@ -1126,7 +1060,7 @@ int main(int argc, char *argv[])
 	colorforth_initialize();
 
 	// Load block 0
-	stack_push(8);
+	stack_push(0);
 	load();
 
 	dot_s();
@@ -1137,3 +1071,4 @@ int main(int argc, char *argv[])
 
 	return EXIT_SUCCESS;
 }
+
