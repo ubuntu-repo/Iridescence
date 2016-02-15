@@ -494,14 +494,6 @@ void next_(void)
 	}
 }
 
-void to_r(void)
-{
-	cell_t n;
-
-	n = stack_pop();
-	rpush(n);
-}
-
 void from_r(void)
 {
 	cell_t n;
@@ -716,13 +708,9 @@ insert_builtins_into_forth_dictionary(void)
 static void
 insert_builtins_into_macro_dictionary(void)
 {
-	struct word_entry *_zero_branch, *_to_r, *_from_r, *_rdrop,
-					  *_minus_one, *_ne, *_swap,
-					  *_if, *_then, *_for, *_next;
+	struct word_entry *_rdrop, *_minus_one, *_ne, *_swap, *_if, *_then, 
+					  *_for, *_next;
 
-	_zero_branch = calloc(1, sizeof(struct word_entry));
-	_to_r        = calloc(1, sizeof(struct word_entry));
-	_from_r      = calloc(1, sizeof(struct word_entry));
 	_rdrop       = calloc(1, sizeof(struct word_entry));
 	_minus_one   = calloc(1, sizeof(struct word_entry));
 	_ne          = calloc(1, sizeof(struct word_entry));
@@ -732,23 +720,13 @@ insert_builtins_into_macro_dictionary(void)
 	_for         = calloc(1, sizeof(struct word_entry));
 	_next        = calloc(1, sizeof(struct word_entry));
 
-	if (!_zero_branch || !_to_r || !_from_r || !_rdrop || !_minus_one
-			|| !_ne || !_swap || !_if || !_then || !_for || !_next)
+	if (!_rdrop || !_minus_one || !_ne || !_swap || !_if || !_then || 
+			!_for || !_next)
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
 		exit(EXIT_FAILURE);
 	}
-
-	_zero_branch->name         = pack("zb");
-	_zero_branch->code_address = zero_branch;
-	_zero_branch->codeword     = &(_zero_branch->code_address);
-
-	_to_r->name                = pack("+r");
-	_to_r->code_address        = to_r;
-
-	_from_r->name              = pack("r-");
-	_from_r->code_address      = from_r;
 
 	_rdrop->name               = pack("rdrop");
 	_rdrop->code_address       = rdrop;
@@ -776,9 +754,6 @@ insert_builtins_into_macro_dictionary(void)
 	_next->name                = pack("next");
 	_next->code_address        = next_;
 
-	LIST_INSERT_HEAD(&macro_dictionary, _zero_branch, next);
-	LIST_INSERT_HEAD(&macro_dictionary, _to_r,        next);
-	LIST_INSERT_HEAD(&macro_dictionary, _from_r,      next);
 	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,       next);
 	LIST_INSERT_HEAD(&macro_dictionary, _minus_one,   next);
 	LIST_INSERT_HEAD(&macro_dictionary, _ne,          next);
@@ -1062,7 +1037,7 @@ int main(int argc, char *argv[])
 	colorforth_initialize();
 
 	// Load block 0
-	stack_push(6);
+	stack_push(0);
 	load();
 
 	dot_s();
