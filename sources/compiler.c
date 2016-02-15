@@ -64,7 +64,8 @@ unsigned long *rtos = start_of(rstack);
 unsigned long *code_here;
 unsigned long *h;	                // Code is inserted here
 bool          selected_dictionary;
-cell_t        *blocks;				// Manage looping over the code contained in blocks
+cell_t        *blocks;              // Manage looping over the code contained in blocks
+unsigned long i;                    // Avoids stopping on variable defaulting to 0
 
 LIST_HEAD(, word_entry) forth_dictionary;
 LIST_HEAD(, word_entry) macro_dictionary;
@@ -558,17 +559,15 @@ do_word(const cell_t word)
 void
 run_block(const cell_t n)
 {
-	unsigned long start, limit, i;
+	unsigned long start, limit;
 
 	start = n * 256;     // Start executing block from here...
 	limit = (n+1) * 256; // ...to this point.
 
 	for (i = start; i < limit-1; i++)
 	{
-		/* Is the end of block reached? If so return.
-		   By the way, don't confuse with variables defaulting to 0 */
-		if (blocks[i] == 0 && blocks[i+1] == 0)
-			return;
+		if (blocks[i] == 0)
+			return; // To avoid displaying msgs for debug purpose
 
 		do_word(blocks[i]);
 	}
@@ -972,6 +971,9 @@ variable_word(const cell_t word)
 	// Exit
 	stack_push((cell_t)exit_word);
 	comma();
+
+	// Skip the value for run_block() routine
+	i++;
 }
 
 /*
@@ -1060,7 +1062,7 @@ int main(int argc, char *argv[])
 	colorforth_initialize();
 
 	// Load block 0
-	stack_push(0);
+	stack_push(6);
 	load();
 
 	dot_s();
