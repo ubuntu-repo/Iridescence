@@ -494,14 +494,6 @@ void next_(void)
 	}
 }
 
-void from_r(void)
-{
-	cell_t n;
-
-	n = rpop();
-	stack_push(n);
-}
-
 void rdrop(void)
 {
 	(void)rpop();
