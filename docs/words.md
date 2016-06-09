@@ -6,7 +6,7 @@ The **stack effect** notion rules are as follows:
 
 
 Notation | Meaning
---------   -------
+-------- | -------
 N        | Number
 A        | Cell address
 Ba       | Byte address
