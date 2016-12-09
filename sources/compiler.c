@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2015-2016 Konstantin Tcholokachvili
  * All rights reserved.
- * Use of this source code is governed by a MIT license that can be 
+ * Use of this source code is governed by a MIT license that can be
  * found in the LICENSE file.
  */
 
@@ -62,20 +62,13 @@ unsigned long *rtos = start_of(rstack);
  * Global variables
  */
 unsigned long *code_here;
-unsigned long *h;	                // Code is inserted here
+unsigned long *h;			// Code is inserted here
 bool          selected_dictionary;
-cell_t        *blocks;              // Manage looping over the code contained in blocks
-unsigned long i;                    // Avoids stopping on variable defaulting to 0
+cell_t        *blocks;			// Manage looping over the code contained in blocks
+unsigned long *IP;			// Instruction Pointer
 
 LIST_HEAD(, word_entry) forth_dictionary;
 LIST_HEAD(, word_entry) macro_dictionary;
-
-/*
- * Forth traditional registers
- */
-unsigned long *P;
-unsigned long *W;
-unsigned long *I;
 
 /*
  * Prototypes
@@ -103,12 +96,13 @@ void (*color_word_action[16])() = {ignore, interpret_forth_word,
 	compile_number, compile_macro, interpret_number,
 	ignore, ignore, ignore, variable_word, ignore, ignore, ignore};
 
-/* 
- * Packing and unpacking words 
+/*
+ * Packing and unpacking words
  */
 char *code = " rtoeanismcylgfwdvpbhxuq0123456789j-k.z/;:!+@*,?";
 
-int get_code_index(const char letter)
+int
+get_code_index(const char letter)
 {
 	// Get the index of a character in the 'code' sequence.
 	return strchr(code, letter) - code;
@@ -134,7 +128,7 @@ pack(const char *word_name)
 		packed      = (packed << length) + letter_code;
 		bits        -= length;
 	}
-	
+
 	packed <<= bits + 4;
 	return packed;
 }
@@ -182,35 +176,12 @@ unpack(const cell_t word)
 	return text;
 }
 
-
-/*
- * Threading words
- */
-void next(void)
+void
+NEXT(void)
 {
-	printf("P: %lx -> %lx\n", (unsigned long)P, *(P));
-	W =  I;
-	I++;
-	P = W;
-	printf("P: %lx -> %lx\n", (unsigned long)P, *(P));
-	((FUNCTION_EXEC)*P)();
+	IP++;
+	((FUNCTION_EXEC)*IP)();
 }
-
-void docol(void)
-{
-	rpush((cell_t)I);
-	I = W + 1;
-	printf("DOCOL: W=%lx, I=%lx\n", (unsigned long)W, (unsigned long)I);
-	next();
-}
-
-void dosemi(void)
-{
-	printf("DOSEMI");
-	*I = rpop();
-	next();
-}
-
 
 /*
  * Built-in words
@@ -218,16 +189,14 @@ void dosemi(void)
 void comma(void)
 {
 	*h = stack_pop();
-	printf("\t, Comma: h at: %p, pointing to %p, TOS = %x\n", h, (void *)*h, 
+	printf("\t, Comma: h at: %p, pointing to %p, TOS = %x\n", h, (void *)*h,
 			(unsigned int)*(tos));
 	h++;
 }
 
 void load(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	run_block(n);
 }
 
@@ -258,114 +227,101 @@ void macro(void)
 
 void exit_word(void)
 {
-	cell_t n;
-printf(" => Exit\n");
-	n = rpop();
+	cell_t n = rpop();
+	printf(" => Exit\n");
 	(void)n;
-
 }
 
 void add(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos += n;
 }
 
-void sub(void)
+void not(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos -= n;
 }
 
 void multiply(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos *= n;
 }
 
 void divide(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos /= n;
 }
 
 void modulo(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos %= n;
 }
 
 void lt(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos < n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void gt(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos > n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ge(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos >= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ne(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos != n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void eq(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos == n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void le(void)
 {
-	cell_t n;
-
-	n = stack_pop();
+	cell_t n = stack_pop();
 	*tos = (*tos <= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
-void and(void) {}
-void or(void) {}
-void xor(void) {}
-void not(void) {}
+void and(void)
+{
+	cell_t a = stack_pop();
+	cell_t b = stack_pop();
+	cell_t result = a & b;
+	stack_push(result);
+}
+
+// It is xor actually.
+void or(void)
+{
+	cell_t a = stack_pop();
+	cell_t b = stack_pop();
+	cell_t result = a ^ b;
+	stack_push(result);
+
+}
 
 void dup_word(void)
 {
-	cell_t n;
-
-	n = *tos;
+	cell_t n = *tos;
 	stack_push(n);
 
-	next();
+	NEXT();
 }
 
 void drop(void)
@@ -375,17 +331,13 @@ void drop(void)
 
 void over(void)
 {
-	cell_t n;
-
-	n = nos;
+	cell_t n = nos;
 	stack_push(n);
 }
 
 void swap(void)
 {
-	cell_t t;
-
-	t = *tos;
+	cell_t t = *tos;
 	*tos = nos;
 	nos = t;
 }
@@ -405,37 +357,18 @@ void dot_s(void)
 
 void store(void)
 {
-	cell_t address, value;
-
-	address = stack_pop();
-	value   = stack_pop();
+	cell_t address = stack_pop();
+	cell_t value   = stack_pop();
 
 	*(cell_t *)address = value;
 }
 
 void fetch(void)
 {
-	cell_t address, value;
-
-	address = stack_pop();
-	value   = *(cell_t *)address;
+	cell_t address = stack_pop();
+	cell_t value   = *(cell_t *)address;
 
 	stack_push(value);
-}
-
-void dump_dict(void)
-{
-	struct word_entry *item;
-
-	LIST_FOREACH(item, &forth_dictionary, next)
-	{
-		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
-	}
-
-	LIST_FOREACH(item, &macro_dictionary, next)
-	{
-		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
-	}
 }
 
 void here(void)
@@ -448,11 +381,11 @@ void zero_branch(void)
 	cell_t n = stack_pop();
 
 	if (n == FORTH_TRUE)
-		I++;
+		IP++;
 	else
-		I = (unsigned long *)*I;
-	
-	next();
+		IP = (unsigned long *)*IP;
+
+	NEXT();
 }
 
 void if_(void)
@@ -472,26 +405,43 @@ void then(void)
 	store();
 }
 
-void for_(void)
+void for_aux(void)
 {
 	cell_t n = stack_pop();
-
 	rpush(n);
-	here();
+
+	NEXT();
+}
+
+void next_aux(void)
+{
+	cell_t n = rpop();
+	cell_t addr = rpop();
+
+	rpush(addr);
+
+	n--;
+	rpush(n);
+
+	if (n > 0)
+	{
+		IP = (unsigned long *)addr;
+		((FUNCTION_EXEC)*IP)();
+	}
+}
+
+void for_(void)
+{
+	stack_push((cell_t)for_aux);
+	comma();
+
+	rpush((cell_t)h);
 }
 
 void next_(void)
 {
-	cell_t n = rpop();
-	
-	if (n > 0)
-	{
-		n--;
-		rpush(n);
-
-		here();
-		store();
-	}
+	stack_push((cell_t)next_aux);
+	comma();
 }
 
 void rdrop(void)
@@ -502,11 +452,6 @@ void rdrop(void)
 void dot(void)
 {
 	printf("%d ", (int)stack_pop());
-}
-
-void minus_one(void)
-{
-	*tos -= 1; 
 }
 
 void i_word(void)
@@ -521,38 +466,51 @@ void i_word(void)
 /*
  * Helper functions
  */
+void
+dump_dict(void)
+{
+	struct word_entry *item;
+
+	LIST_FOREACH(item, &forth_dictionary, next)
+	{
+		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
+	}
+
+	LIST_FOREACH(item, &macro_dictionary, next)
+	{
+		printf("word: %10s, %x, code:%p\n", unpack(item->name), (int)item->name, item->code_address);
+	}
+}
+
 static void
 do_word(const cell_t word)
 {
 	uint8_t color = (int)word & 0x0000000f;
-	
+
 	if (color == 2 || color == 5 || color == 6 || color == 8 || color == 15)
 	{
-		printf("Color = %1d, Word = %10d, packed = %8x\n", 
+		printf("Color = %1d, Word = %10d, packed = %8x\n",
 				color, word >> 5, word);
 	}
-	else
+	else if (color != 0)
 	{
-		printf("Color = %1d, Word = %10s, packed = %8x\n", 
+		printf("Color = %1d, Word = %10s, packed = %8x\n",
 				color, unpack(word), word);
 	}
-	
+
 	(*color_word_action[color])(word);
 }
 
 void
 run_block(const cell_t n)
 {
-	unsigned long start, limit;
+	unsigned long start, limit, i;
 
 	start = n * 256;     // Start executing block from here...
 	limit = (n+1) * 256; // ...to this point.
 
 	for (i = start; i < limit-1; i++)
 	{
-		if (blocks[i] == 0)
-			return; // To avoid displaying msgs for debug purpose
-
 		do_word(blocks[i]);
 	}
 }
@@ -588,31 +546,30 @@ lookup_word(cell_t name, const bool force_dictionary)
 static void
 insert_builtins_into_forth_dictionary(void)
 {
-	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro, 
-					  *_exit_word, *_store, *_fetch, *_add, *_sub, 
-					  *_mult, *_div, *_ne, *_dup, *_dot, *_here, *_i;
+	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro,
+			  *_exit_word, *_store, *_fetch, *_add, *_not,
+			  *_mult, *_div, *_ne, *_dup, *_dot, *_here, *_i;
 
-	_comma      = calloc(1, sizeof(struct word_entry));
-	_load	    = calloc(1, sizeof(struct word_entry));
-	_loads	    = calloc(1, sizeof(struct word_entry));
-	_forth	    = calloc(1, sizeof(struct word_entry));
-	_macro	    = calloc(1, sizeof(struct word_entry));
-	_exit_word  = calloc(1, sizeof(struct word_entry));
-	_store      = calloc(1, sizeof(struct word_entry));
-	_fetch      = calloc(1, sizeof(struct word_entry));
-	_add        = calloc(1, sizeof(struct word_entry));
-	_sub        = calloc(1, sizeof(struct word_entry));
-	_mult       = calloc(1, sizeof(struct word_entry));
-	_div        = calloc(1, sizeof(struct word_entry));
-	_ne         = calloc(1, sizeof(struct word_entry));
-	_dup        = calloc(1, sizeof(struct word_entry));
-	_dot        = calloc(1, sizeof(struct word_entry));
-	_here       = calloc(1, sizeof(struct word_entry));
-	_i          = calloc(1, sizeof(struct word_entry));
-
+	_comma		= calloc(1, sizeof(struct word_entry));
+	_load		= calloc(1, sizeof(struct word_entry));
+	_loads		= calloc(1, sizeof(struct word_entry));
+	_forth		= calloc(1, sizeof(struct word_entry));
+	_macro		= calloc(1, sizeof(struct word_entry));
+	_exit_word	= calloc(1, sizeof(struct word_entry));
+	_store		= calloc(1, sizeof(struct word_entry));
+	_fetch		= calloc(1, sizeof(struct word_entry));
+	_add		= calloc(1, sizeof(struct word_entry));
+	_not		= calloc(1, sizeof(struct word_entry));
+	_mult		= calloc(1, sizeof(struct word_entry));
+	_div		= calloc(1, sizeof(struct word_entry));
+	_ne		= calloc(1, sizeof(struct word_entry));
+	_dup		= calloc(1, sizeof(struct word_entry));
+	_dot		= calloc(1, sizeof(struct word_entry));
+	_here		= calloc(1, sizeof(struct word_entry));
+	_i		= calloc(1, sizeof(struct word_entry));
 
 	if (!_comma || !_load || !_loads || !_forth || !_macro || !_exit_word
-			|| !_store || !_fetch || !_add || !_sub || !_mult || !_div 
+			|| !_store || !_fetch || !_add || !_not || !_mult || !_div
 			|| !_ne || !_dup || !_dot || !_here || !_i)
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
@@ -620,91 +577,98 @@ insert_builtins_into_forth_dictionary(void)
 		exit(EXIT_FAILURE);
 	}
 
-	_comma->name             = pack(",");
-	_comma->code_address     = comma;
+	_comma->name		= pack(",");
+	_comma->code_address	= comma;
+	_comma->codeword	= &(_comma->code_address);
 
-	_load->name              = pack("load");
-	_load->code_address      = load;
-	
-	_loads->name             = pack("loads");
-	_loads->code_address     = loads;
+	_load->name		= pack("load");
+	_load->code_address	= load;
+	_load->codeword		= &(_load->code_address);
 
-	_forth->name             = pack("forth");
-	_forth->code_address     = forth;
+	_loads->name		= pack("loads");
+	_loads->code_address	= loads;
+	_loads->codeword	= &(_loads->code_address);
 
-	_macro->name             = pack("macro");
-	_macro->code_address     = macro;
+	_forth->name		= pack("forth");
+	_forth->code_address	= forth;
+	_forth->codeword	= &(_forth->code_address);
 
-	_exit_word->name         = pack(";");
-	_exit_word->code_address = exit_word;
-	_exit_word->codeword     = &(_exit_word->code_address);
+	_macro->name		= pack("macro");
+	_macro->code_address	= macro;
+	_macro->codeword	= &(_macro->code_address);
 
-	_store->name             = pack("!");
-	_store->code_address     = store;
-	_store->codeword         = &(_store->code_address);
+	_exit_word->name		= pack(";");
+	_exit_word->code_address	= exit_word;
+	_exit_word->codeword		= &(_exit_word->code_address);
 
-	_fetch->name             = pack("@");
-	_fetch->code_address     = fetch;
-	_fetch->codeword         = &(_fetch->code_address);
+	_store->name		= pack("!");
+	_store->code_address	= store;
+	_store->codeword	= &(_store->code_address);
 
-	_add->name               = pack("+");
-	_add->code_address       = add;
-	_add->codeword           = &(_add->code_address);
+	_fetch->name		= pack("@");
+	_fetch->code_address	= fetch;
+	_fetch->codeword	= &(_fetch->code_address);
 
-	_sub->name               = pack("-");
-	_sub->code_address       = sub;
+	_add->name		= pack("+");
+	_add->code_address	= add;
+	_add->codeword		= &(_add->code_address);
 
-	_mult->name              = pack("*");
-	_mult->code_address      = multiply;
-	_mult->codeword          = &(_mult->code_address);
+	_not->name		= pack("-");
+	_not->code_address	= not;
+	_not->codeword		= &(_not->code_address);
 
-	_div->name               = pack("/");
-	_div->code_address       = divide;
+	_mult->name		= pack("*");
+	_mult->code_address	= multiply;
+	_mult->codeword		= &(_mult->code_address);
 
-	_ne->name                = pack("ne");
-	_ne->code_address        = ne;
+	_div->name		= pack("/");
+	_div->code_address	= divide;
+	_div->codeword		= &(_div->code_address);
 
-	_dup->name               = pack("dup");
-	_dup->code_address       = dup_word;
-	_dup->codeword           = &(_dup->code_address);
+	_ne->name		= pack("ne");
+	_ne->code_address	= ne;
 
-	_dot->name               = pack(".");
-	_dot->code_address       = dot;
-	_dot->codeword           = &(_dot->code_address);
+	_dup->name		= pack("dup");
+	_dup->code_address	= dup_word;
+	_dup->codeword		= &(_dup->code_address);
 
-	_here->name              = pack("here");
-	_here->code_address      = here;
+	_dot->name		= pack(".");
+	_dot->code_address	= dot;
+	_dot->codeword		= &(_dot->code_address);
 
-	_i->name                 = pack("i");
-	_i->code_address         = i_word;
+	_here->name		= pack("here");
+	_here->code_address	= here;
+	_here->codeword		= &(_here->code_address);
 
-	LIST_INSERT_HEAD(&forth_dictionary, _comma,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _load,       next);
-	LIST_INSERT_HEAD(&forth_dictionary, _loads,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _forth,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _macro,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _exit_word,  next);
-	LIST_INSERT_HEAD(&forth_dictionary, _store,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _fetch,      next);
-	LIST_INSERT_HEAD(&forth_dictionary, _add,        next);
-	LIST_INSERT_HEAD(&forth_dictionary, _sub,        next);
-	LIST_INSERT_HEAD(&forth_dictionary, _mult,       next);
-	LIST_INSERT_HEAD(&forth_dictionary, _div,        next);
-	LIST_INSERT_HEAD(&forth_dictionary, _ne,         next);
-	LIST_INSERT_HEAD(&forth_dictionary, _dup,        next);
-	LIST_INSERT_HEAD(&forth_dictionary, _dot,        next);
-	LIST_INSERT_HEAD(&forth_dictionary, _here,       next);
-	LIST_INSERT_HEAD(&forth_dictionary, _i,          next);
+	_i->name		= pack("i");
+	_i->code_address	= i_word;
+	_i->codeword		= &(_i->code_address);
+
+	LIST_INSERT_HEAD(&forth_dictionary, _comma,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _load,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _loads,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _forth,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _macro,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _exit_word,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _store,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _fetch,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _add,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _not,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _mult,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _div,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _ne,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _dup,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _dot,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _here,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _i,		next);
 }
 
 static void
 insert_builtins_into_macro_dictionary(void)
 {
-	struct word_entry *_rdrop, *_minus_one, *_ne, *_swap, *_if, *_then, 
-					  *_for, *_next;
+	struct word_entry *_rdrop, *_ne, *_swap, *_if, *_then, *_for, *_next;
 
 	_rdrop       = calloc(1, sizeof(struct word_entry));
-	_minus_one   = calloc(1, sizeof(struct word_entry));
 	_ne          = calloc(1, sizeof(struct word_entry));
 	_swap        = calloc(1, sizeof(struct word_entry));
 	_if          = calloc(1, sizeof(struct word_entry));
@@ -712,8 +676,7 @@ insert_builtins_into_macro_dictionary(void)
 	_for         = calloc(1, sizeof(struct word_entry));
 	_next        = calloc(1, sizeof(struct word_entry));
 
-	if (!_rdrop || !_minus_one || !_ne || !_swap || !_if || !_then || 
-			!_for || !_next)
+	if (!_rdrop || !_ne || !_swap || !_if || !_then || !_for || !_next)
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
@@ -722,15 +685,15 @@ insert_builtins_into_macro_dictionary(void)
 
 	_rdrop->name               = pack("rdrop");
 	_rdrop->code_address       = rdrop;
-
-	_minus_one->name           = pack("1-");
-	_minus_one->code_address   = minus_one;
+	_rdrop->codeword           = &(_rdrop->code_address);
 
 	_ne->name                  = pack("ne");
 	_ne->code_address          = ne;
+	_ne->codeword              = &(_ne->code_address);
 
 	_swap->name                = pack("swap");
 	_swap->code_address        = swap;
+	_swap->codeword            = &(_swap->code_address);
 
 	_if->name                  = pack("if");
 	_if->code_address          = if_;
@@ -742,12 +705,13 @@ insert_builtins_into_macro_dictionary(void)
 
 	_for->name                 = pack("for");
 	_for->code_address         = for_;
+	_for->codeword             = &(_for->code_address);
 
 	_next->name                = pack("next");
 	_next->code_address        = next_;
+	_next->codeword            = &(_next->code_address);
 
 	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,       next);
-	LIST_INSERT_HEAD(&macro_dictionary, _minus_one,   next);
 	LIST_INSERT_HEAD(&macro_dictionary, _ne,          next);
 	LIST_INSERT_HEAD(&macro_dictionary, _swap,        next);
 	LIST_INSERT_HEAD(&macro_dictionary, _if,          next);
@@ -762,36 +726,32 @@ literal(void)
 	cell_t n;
 
 	// Skip literal's address
-	printf("Literal: %lx %lx\n", (unsigned long)I, (unsigned long)(*(cell_t *)I)>>5);
-	
+	IP++;
+
 	// Fetch the number from the next cell
-	n = *(cell_t *)I;
+	n = *(cell_t *)IP;
 	n >>= 5;  // Make it a number again ;-)
-	printf("N = %d\n", n);
 
 	// Push the number on the stack
 	stack_push(n);
 
-	I++;
-	next();
+	NEXT();
 }
 
 void
 variable(void)
 {
-	I++; // Fetch the variable's address from the next cell
-	stack_push((cell_t)I); // Push it on the stack
-	W--;
+	IP++; // Fetch the variable's address from the next cell
+	stack_push((cell_t)IP); // Push it on the stack
 }
 
 static void
 execute(const struct word_entry *word)
 {
 	printf("EXEC: %lx -> %lx\n", (unsigned long)word->code_address, *(unsigned long *)word->code_address);
+	IP = word->code_address;
 	((FUNCTION_EXEC)*(unsigned long *)word->codeword)();
 }
-
-
 
 /*
  * Colorful words handling
@@ -806,7 +766,7 @@ static void
 interpret_forth_word(const cell_t word)
 {
 	struct word_entry *entry;
-printf("IFW: %s\n", unpack(word));
+
 	entry = lookup_word(word, FORTH_DICTIONARY);
 
 	if (entry)
@@ -835,7 +795,7 @@ compile_word(const cell_t word)
 	if (entry)
 	{
 		// Execute macro word
-		printf("Execute Macro: name = %s, code_address = %p\n", 
+		printf("Execute Macro: name = %s, code_address = %p\n",
 				unpack(entry->name), entry->code_address);
 		execute(entry);
 	}
@@ -902,15 +862,11 @@ create_word(cell_t word)
 
 	word &= 0xfffffff0;
 
-	printf("docol: %p\n", docol);
 	entry->name         = word;
 	entry->code_address = h;
 	entry->codeword     = h;
 
-	stack_push((cell_t)docol);
-	comma();
-
-	printf("create_word(): at %p, name = %x\n", entry->code_address, 
+	printf("create_word(): at %p, name = %x\n", entry->code_address,
 			(int)entry->name);
 
 	if (selected_dictionary == MACRO_DICTIONARY)
@@ -934,13 +890,6 @@ variable_word(const cell_t word)
 	// The default value of a variable is 0 (green number)
 	stack_push(0);
 	comma();
-
-	// Exit
-	stack_push((cell_t)exit_word);
-	comma();
-
-	// Skip the value for run_block() routine
-	i++;
 }
 
 /*
@@ -958,10 +907,6 @@ colorforth_initialize(void)
 	}
 
 	h = code_here;
-
-	P = h;
-	W = h;
-	I = h;
 
 	LIST_INIT(&forth_dictionary);
 	LIST_INIT(&macro_dictionary);
@@ -994,8 +939,8 @@ colorforth_finalize(void)
 	free(code_here);
 }
 
-
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
 	int fd;
 	struct stat sbuf;
@@ -1040,4 +985,3 @@ int main(int argc, char *argv[])
 
 	return EXIT_SUCCESS;
 }
-
