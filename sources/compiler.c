@@ -547,8 +547,8 @@ static void
 insert_builtins_into_forth_dictionary(void)
 {
 	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro,
-			  *_exit_word, *_store, *_fetch, *_add, *_not,
-			  *_mult, *_div, *_ne, *_dup, *_dot, *_here, *_i;
+		*_exit_word, *_store, *_fetch, *_add, *_not,
+		*_mult, *_div, *_ne, *_dup, *_dot, *_here, *_i;
 
 	_comma		= calloc(1, sizeof(struct word_entry));
 	_load		= calloc(1, sizeof(struct word_entry));
