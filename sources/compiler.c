@@ -568,9 +568,9 @@ insert_builtins_into_forth_dictionary(void)
 	_here		= calloc(1, sizeof(struct word_entry));
 	_i		= calloc(1, sizeof(struct word_entry));
 
-	if (!_comma || !_load || !_loads || !_forth || !_macro || !_exit_word
-			|| !_store || !_fetch || !_add || !_not || !_mult || !_div
-			|| !_ne || !_dup || !_dot || !_here || !_i)
+	if (!(_comma && _load && _loads && _forth && _macro && _exit_word
+			&& _store && _fetch && _add && _not && _mult && _div
+			&& _ne && _dup && _dot && _here && _i))
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
@@ -676,7 +676,7 @@ insert_builtins_into_macro_dictionary(void)
 	_for         = calloc(1, sizeof(struct word_entry));
 	_next        = calloc(1, sizeof(struct word_entry));
 
-	if (!_rdrop || !_ne || !_swap || !_if || !_then || !_for || !_next)
+	if (!(_rdrop && _ne && _swap && _if && _then && _for && _next))
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
