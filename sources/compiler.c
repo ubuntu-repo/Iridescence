@@ -51,8 +51,8 @@ typedef void (*FUNCTION_EXEC)(void);
 #define start_of(x)   (&x[0])
 
 /* Data stack */
-cell_t stack[STACK_SIZE];
-cell_t *tos = start_of(stack);	// Top Of Stack
+long stack[STACK_SIZE];
+long *tos = start_of(stack);	// Top Of Stack
 
 /* Return stack */
 unsigned long rstack[STACK_SIZE];
@@ -196,13 +196,13 @@ void comma(void)
 
 void load(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	run_block(n);
 }
 
 void loads(void)
 {
-	cell_t i, j;
+	long i, j;
 
 	j = stack_pop();
 	i = stack_pop();
@@ -227,98 +227,98 @@ void macro(void)
 
 void exit_word(void)
 {
-	cell_t n = rpop();
+	long n = rpop();
 	printf(" => Exit\n");
 	(void)n;
 }
 
 void add(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos += n;
 }
 
 void not(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos -= n;
 }
 
 void multiply(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos *= n;
 }
 
 void divide(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos /= n;
 }
 
 void modulo(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos %= n;
 }
 
 void lt(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos < n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void gt(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos > n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ge(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos >= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void ne(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos != n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void eq(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos == n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void le(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	*tos = (*tos <= n) ? FORTH_TRUE : FORTH_FALSE;
 }
 
 void and(void)
 {
-	cell_t a = stack_pop();
-	cell_t b = stack_pop();
-	cell_t result = a & b;
+	long a = stack_pop();
+	long b = stack_pop();
+	long result = a & b;
 	stack_push(result);
 }
 
 // It is xor actually.
 void or(void)
 {
-	cell_t a = stack_pop();
-	cell_t b = stack_pop();
-	cell_t result = a ^ b;
+	long a = stack_pop();
+	long b = stack_pop();
+	long result = a ^ b;
 	stack_push(result);
 
 }
 
 void dup_word(void)
 {
-	cell_t n = *tos;
+	long n = *tos;
 	stack_push(n);
 
 	NEXT();
@@ -331,13 +331,13 @@ void drop(void)
 
 void over(void)
 {
-	cell_t n = nos;
+	long n = nos;
 	stack_push(n);
 }
 
 void swap(void)
 {
-	cell_t t = *tos;
+	long t = *tos;
 	*tos = nos;
 	nos = t;
 }
@@ -357,28 +357,28 @@ void dot_s(void)
 
 void store(void)
 {
-	cell_t address = stack_pop();
-	cell_t value   = stack_pop();
+	long address = stack_pop();
+	long value   = stack_pop();
 
-	*(cell_t *)address = value;
+	*(long *)address = value;
 }
 
 void fetch(void)
 {
-	cell_t address = stack_pop();
-	cell_t value   = *(cell_t *)address;
+	long address = stack_pop();
+	long value   = *(long *)address;
 
 	stack_push(value);
 }
 
 void here(void)
 {
-	stack_push((cell_t)h);
+	stack_push((long)h);
 }
 
 void zero_branch(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 
 	if (n == FORTH_TRUE)
 		IP++;
@@ -390,7 +390,7 @@ void zero_branch(void)
 
 void if_(void)
 {
-	stack_push((cell_t)zero_branch);
+	stack_push((long)zero_branch);
 	comma();
 
 	here();
@@ -407,7 +407,7 @@ void then(void)
 
 void for_aux(void)
 {
-	cell_t n = stack_pop();
+	long n = stack_pop();
 	rpush(n);
 
 	NEXT();
@@ -415,8 +415,8 @@ void for_aux(void)
 
 void next_aux(void)
 {
-	cell_t n = rpop();
-	cell_t addr = rpop();
+	long n = rpop();
+	long addr = rpop();
 
 	rpush(addr);
 
@@ -432,15 +432,15 @@ void next_aux(void)
 
 void for_(void)
 {
-	stack_push((cell_t)for_aux);
+	stack_push((long)for_aux);
 	comma();
 
-	rpush((cell_t)h);
+	rpush((long)h);
 }
 
 void next_(void)
 {
-	stack_push((cell_t)next_aux);
+	stack_push((long)next_aux);
 	comma();
 }
 
@@ -456,7 +456,7 @@ void dot(void)
 
 void i_word(void)
 {
-	cell_t n;
+	long n;
 
 	n = rpop();
 	stack_push(n);
@@ -723,13 +723,13 @@ insert_builtins_into_macro_dictionary(void)
 void
 literal(void)
 {
-	cell_t n;
+	long n;
 
 	// Skip literal's address
 	IP++;
 
 	// Fetch the number from the next cell
-	n = *(cell_t *)IP;
+	n = *(long *)IP;
 	n >>= 5;  // Make it a number again ;-)
 
 	// Push the number on the stack
@@ -742,7 +742,7 @@ void
 variable(void)
 {
 	IP++; // Fetch the variable's address from the next cell
-	stack_push((cell_t)IP); // Push it on the stack
+	stack_push((long)IP); // Push it on the stack
 }
 
 static void
@@ -806,7 +806,7 @@ compile_word(const cell_t word)
 		if (entry)
 		{
 			// Compile a call to that word
-			stack_push((cell_t)entry->code_address);
+			stack_push((long)entry->code_address);
 			comma();
 			printf("To compile: %s, %x, at address: %p\n", unpack(entry->name),
 					(int)entry->name, h);
@@ -817,7 +817,7 @@ compile_word(const cell_t word)
 static void
 compile_number(const cell_t number)
 {
-	stack_push((cell_t)literal);
+	stack_push((long)literal);
 	comma();
 
 	stack_push(number);
@@ -841,7 +841,7 @@ compile_macro(const cell_t word)
 	{
 		// Compile a call to that macro
 		printf("Macro: %s -> %lx\n", unpack(word), (unsigned long)entry->code_address);
-		stack_push((cell_t)entry->code_address);
+		stack_push((long)entry->code_address);
 		comma();
 	}
 }
@@ -884,7 +884,7 @@ variable_word(const cell_t word)
 	create_word(word);
 
 	// Variable's handler
-	stack_push((cell_t)variable);
+	stack_push((long)variable);
 	comma();
 
 	// The default value of a variable is 0 (green number)

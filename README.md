@@ -1,7 +1,5 @@
 # Iridescence
-Portable and hosted colorForth.
+Portable and hosted colorForth for 32-bit and 64-bit architectures.
 
 # TODO
-- Words: for, next
 - GUI
-- 64-bit support
