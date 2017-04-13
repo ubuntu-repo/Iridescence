@@ -238,10 +238,10 @@ void add(void)
 	*tos += n;
 }
 
-void not(void)
+void one_complement(void)
 {
 	long n = stack_pop();
-	*tos -= n;
+	*tos = ~n;
 }
 
 void multiply(void)
@@ -306,14 +306,19 @@ void and(void)
 	stack_push(result);
 }
 
-// It is xor actually.
+void negate(void)
+{
+	long n = stack_pop();
+	stack_push(-n);
+}
+
+// It is actually a xor.
 void or(void)
 {
 	long a = stack_pop();
 	long b = stack_pop();
 	long result = a ^ b;
 	stack_push(result);
-
 }
 
 void dup_word(void)
@@ -329,6 +334,13 @@ void drop(void)
 	(void)stack_pop(); // Cast to avoid a warning about not used computed value
 }
 
+void nip(void)
+{
+	long n = stack_pop();
+	(void)stack_pop();
+	stack_push(n);
+}
+
 void over(void)
 {
 	long n = nos;
@@ -337,9 +349,9 @@ void over(void)
 
 void swap(void)
 {
-	long t = *tos;
+	long top = *tos;
 	*tos = nos;
-	nos = t;
+	nos = top;
 }
 
 void dot_s(void)
@@ -547,8 +559,8 @@ static void
 insert_builtins_into_forth_dictionary(void)
 {
 	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro,
-		*_exit_word, *_store, *_fetch, *_add, *_not,
-		*_mult, *_div, *_ne, *_dup, *_dot, *_here, *_i;
+		*_exit_word, *_store, *_fetch, *_add, *_one_complement, *_mult,
+		*_div, *_ne, *_dup, *_drop, *_nip, *_negate, *_dot, *_here, *_i;
 
 	_comma		= calloc(1, sizeof(struct word_entry));
 	_load		= calloc(1, sizeof(struct word_entry));
@@ -559,18 +571,22 @@ insert_builtins_into_forth_dictionary(void)
 	_store		= calloc(1, sizeof(struct word_entry));
 	_fetch		= calloc(1, sizeof(struct word_entry));
 	_add		= calloc(1, sizeof(struct word_entry));
-	_not		= calloc(1, sizeof(struct word_entry));
+	_one_complement	= calloc(1, sizeof(struct word_entry));
 	_mult		= calloc(1, sizeof(struct word_entry));
 	_div		= calloc(1, sizeof(struct word_entry));
 	_ne		= calloc(1, sizeof(struct word_entry));
 	_dup		= calloc(1, sizeof(struct word_entry));
+	_drop		= calloc(1, sizeof(struct word_entry));
+	_nip		= calloc(1, sizeof(struct word_entry));
+	_negate		= calloc(1, sizeof(struct word_entry));
 	_dot		= calloc(1, sizeof(struct word_entry));
 	_here		= calloc(1, sizeof(struct word_entry));
 	_i		= calloc(1, sizeof(struct word_entry));
 
 	if (!(_comma && _load && _loads && _forth && _macro && _exit_word
-			&& _store && _fetch && _add && _not && _mult && _div
-			&& _ne && _dup && _dot && _here && _i))
+			&& _store && _fetch && _add && _one_complement
+			&& _mult && _div && _ne && _dup && _drop && _nip
+			&& _negate && _dot && _here && _i))
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
@@ -613,9 +629,9 @@ insert_builtins_into_forth_dictionary(void)
 	_add->code_address	= add;
 	_add->codeword		= &(_add->code_address);
 
-	_not->name		= pack("-");
-	_not->code_address	= not;
-	_not->codeword		= &(_not->code_address);
+	_one_complement->name		= pack("-");
+	_one_complement->code_address	= one_complement;
+	_one_complement->codeword	= &(_one_complement->code_address);
 
 	_mult->name		= pack("*");
 	_mult->code_address	= multiply;
@@ -632,6 +648,18 @@ insert_builtins_into_forth_dictionary(void)
 	_dup->code_address	= dup_word;
 	_dup->codeword		= &(_dup->code_address);
 
+	_drop->name		= pack("drop");
+	_drop->code_address	= drop;
+	_drop->codeword		= &(_drop->code_address);
+
+	_nip->name		= pack("nip");
+	_nip->code_address	= nip;
+	_nip->codeword		= &(_nip->code_address);
+
+	_negate->name		= pack("negate");
+	_negate->code_address	= negate;
+	_negate->codeword	= &(_negate->code_address);
+
 	_dot->name		= pack(".");
 	_dot->code_address	= dot;
 	_dot->codeword		= &(_dot->code_address);
@@ -644,23 +672,26 @@ insert_builtins_into_forth_dictionary(void)
 	_i->code_address	= i_word;
 	_i->codeword		= &(_i->code_address);
 
-	LIST_INSERT_HEAD(&forth_dictionary, _comma,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _load,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _loads,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _forth,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _macro,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _exit_word,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _store,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _fetch,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _add,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _not,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _mult,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _div,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _ne,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _dup,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _dot,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _here,	next);
-	LIST_INSERT_HEAD(&forth_dictionary, _i,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _comma,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _load,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _loads,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _forth,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _macro,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _exit_word,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _store,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _fetch,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _add,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _one_complement,	next);
+	LIST_INSERT_HEAD(&forth_dictionary, _mult,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _div,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _ne,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _dup,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _drop,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _nip,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _negate,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _dot,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _here,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _i,			next);
 }
 
 static void
@@ -711,13 +742,13 @@ insert_builtins_into_macro_dictionary(void)
 	_next->code_address        = next_;
 	_next->codeword            = &(_next->code_address);
 
-	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,       next);
-	LIST_INSERT_HEAD(&macro_dictionary, _ne,          next);
-	LIST_INSERT_HEAD(&macro_dictionary, _swap,        next);
-	LIST_INSERT_HEAD(&macro_dictionary, _if,          next);
-	LIST_INSERT_HEAD(&macro_dictionary, _then,        next);
-	LIST_INSERT_HEAD(&macro_dictionary, _for,         next);
-	LIST_INSERT_HEAD(&macro_dictionary, _next,        next);
+	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _ne,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _swap,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _if,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _then,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _for,	next);
+	LIST_INSERT_HEAD(&macro_dictionary, _next,	next);
 }
 
 void
