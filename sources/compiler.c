@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <assert.h>
 
 #define CODE_HEAP_SIZE (1024 * 100)	// 100 Kb
 #define STACK_SIZE     8
@@ -117,6 +118,8 @@ pack(const char *word_name)
 	int word_length, i, bits, length, letter_code, packed;
 
 	word_length = strlen(word_name);
+	assert(word_length != 0);
+
 	packed      = 0;
 	bits        = 28;
 
