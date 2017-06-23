@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Konstantin Tcholokachvili
+ * Copyright (c) 2015-2017 Konstantin Tcholokachvili
  * All rights reserved.
  * Use of this source code is governed by a MIT license that can be
  * found in the LICENSE file.
@@ -17,11 +17,10 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "colorforth.h"
+
 #define CODE_HEAP_SIZE (1024 * 100)	// 100 Kb
 #define STACK_SIZE     8
-
-#define FORTH_DICTIONARY true
-#define MACRO_DICTIONARY false
 
 #define FORTH_TRUE -1      // In Forth world -1 means true
 #define FORTH_FALSE 0
@@ -85,9 +84,6 @@ static void compile_macro(const cell_t word);
 static void interpret_number(const cell_t number);
 static void variable_word(const cell_t word);
 static void literal(void);
-static void run_block(const cell_t word);
-static void colorforth_initialize(void);
-static void colorforth_finalize(void);
 
 
 /* Word extensions (0), comments (9, 10, 11, 15), compiler feedback (13)
@@ -162,7 +158,7 @@ unpack(const cell_t word)
 		}
 		else if (nibble < 0xc)
 		{
-			text[i] += code[(((nibble^0xc) << 1) | ((coded&HIGHBIT) > 0))];
+			text[i] += code[(((nibble ^ 0xc) << 1) | ((coded & HIGHBIT) > 0))];
 			coded    = (coded << 1) & MASK;
 			bits    -= 1;
 		}
@@ -228,7 +224,7 @@ void macro(void)
 	selected_dictionary = MACRO_DICTIONARY;
 }
 
-void exit_word(void)
+void exit_definition(void)
 {
 	long n = rpop();
 	printf(" => Exit\n");
@@ -497,7 +493,7 @@ dump_dict(void)
 	}
 }
 
-static void
+void
 do_word(const cell_t word)
 {
 	uint8_t color = (int)word & 0x0000000f;
@@ -525,9 +521,7 @@ run_block(const cell_t n)
 	limit = (n+1) * 256; // ...to this point.
 
 	for (i = start; i < limit-1; i++)
-	{
 		do_word(blocks[i]);
-	}
 }
 
 struct word_entry *
@@ -562,7 +556,7 @@ static void
 insert_builtins_into_forth_dictionary(void)
 {
 	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro,
-		*_exit_word, *_store, *_fetch, *_add, *_one_complement, *_mult,
+		*_exit, *_store, *_fetch, *_add, *_one_complement, *_mult,
 		*_div, *_ne, *_dup, *_drop, *_nip, *_negate, *_dot, *_here, *_i;
 
 	_comma		= calloc(1, sizeof(struct word_entry));
@@ -570,7 +564,7 @@ insert_builtins_into_forth_dictionary(void)
 	_loads		= calloc(1, sizeof(struct word_entry));
 	_forth		= calloc(1, sizeof(struct word_entry));
 	_macro		= calloc(1, sizeof(struct word_entry));
-	_exit_word	= calloc(1, sizeof(struct word_entry));
+	_exit		= calloc(1, sizeof(struct word_entry));
 	_store		= calloc(1, sizeof(struct word_entry));
 	_fetch		= calloc(1, sizeof(struct word_entry));
 	_add		= calloc(1, sizeof(struct word_entry));
@@ -586,7 +580,7 @@ insert_builtins_into_forth_dictionary(void)
 	_here		= calloc(1, sizeof(struct word_entry));
 	_i		= calloc(1, sizeof(struct word_entry));
 
-	if (!(_comma && _load && _loads && _forth && _macro && _exit_word
+	if (!(_comma && _load && _loads && _forth && _macro && _exit
 			&& _store && _fetch && _add && _one_complement
 			&& _mult && _div && _ne && _dup && _drop && _nip
 			&& _negate && _dot && _here && _i))
@@ -616,9 +610,9 @@ insert_builtins_into_forth_dictionary(void)
 	_macro->code_address	= macro;
 	_macro->codeword	= &(_macro->code_address);
 
-	_exit_word->name		= pack(";");
-	_exit_word->code_address	= exit_word;
-	_exit_word->codeword		= &(_exit_word->code_address);
+	_exit->name		= pack(";");
+	_exit->code_address	= exit_definition;
+	_exit->codeword		= &(_exit->code_address);
 
 	_store->name		= pack("!");
 	_store->code_address	= store;
@@ -680,7 +674,7 @@ insert_builtins_into_forth_dictionary(void)
 	LIST_INSERT_HEAD(&forth_dictionary, _loads,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _forth,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _macro,		next);
-	LIST_INSERT_HEAD(&forth_dictionary, _exit_word,		next);
+	LIST_INSERT_HEAD(&forth_dictionary, _exit,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _store,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _fetch,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _add,		next);
@@ -822,9 +816,7 @@ interpret_number(const cell_t number)
 static void
 compile_word(const cell_t word)
 {
-	struct word_entry *entry;
-
-	entry = lookup_word(word, MACRO_DICTIONARY);
+	struct word_entry *entry = lookup_word(word, MACRO_DICTIONARY);
 
 	if (entry)
 	{
@@ -929,7 +921,7 @@ variable_word(const cell_t word)
 /*
  * Initializing and deinitalizing colorForth
  */
-static void
+void
 colorforth_initialize(void)
 {
 	code_here = malloc(CODE_HEAP_SIZE);
@@ -953,7 +945,7 @@ colorforth_initialize(void)
 	dump_dict();
 }
 
-static void
+void
 colorforth_finalize(void)
 {
 	struct word_entry *item;
@@ -971,51 +963,4 @@ colorforth_finalize(void)
 	}
 
 	free(code_here);
-}
-
-int
-main(int argc, char *argv[])
-{
-	int fd;
-	struct stat sbuf;
-
-	if (argc != 2)
-	{
-		fprintf(stderr, "Usage: %s block-file\n", argv[0]);
-		return EXIT_FAILURE;
-	}
-
-	if ((fd = open(argv[1], O_RDONLY)) == -1)
-	{
-		perror("open");
-		exit(EXIT_FAILURE);
-	}
-
-	if (stat(argv[1], &sbuf) == -1)
-	{
-		perror("stat");
-		exit(EXIT_FAILURE);
-	}
-
-	blocks = mmap(0, sbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
-
-	if (blocks == MAP_FAILED)
-	{
-		perror("mmap");
-		exit(EXIT_FAILURE);
-	}
-
-	colorforth_initialize();
-
-	// Load block 0
-	stack_push(0);
-	load();
-
-	dot_s();
-
-	munmap(blocks, sbuf.st_size);
-	close(fd);
-	colorforth_finalize();
-
-	return EXIT_SUCCESS;
 }
