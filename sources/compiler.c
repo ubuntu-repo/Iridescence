@@ -88,10 +88,12 @@ static void literal(void);
 
 /* Word extensions (0), comments (9, 10, 11, 15), compiler feedback (13)
  * and display macro (14) are ignored. */
-void (*color_word_action[16])() = {ignore, interpret_forth_word,
-	interpret_big_number, create_word, compile_word, compile_big_number,
-	compile_number, compile_macro, interpret_number,
-	ignore, ignore, ignore, variable_word, ignore, ignore, ignore};
+void (*color_word_action[16])() = {
+	ignore, interpret_forth_word, interpret_big_number, create_word,
+	compile_word, compile_big_number, compile_number, compile_macro,
+	interpret_number, ignore, ignore, ignore, variable_word, ignore,
+	ignore, ignore
+};
 
 /*
  * Packing and unpacking words
@@ -116,8 +118,8 @@ pack(const char *word_name)
 	word_length = strlen(word_name);
 	assert(word_length != 0);
 
-	packed      = 0;
-	bits        = 28;
+	packed = 0;
+	bits   = 28;
 
 	for (i = 0; i < word_length; i++)
 	{
@@ -301,8 +303,7 @@ void and(void)
 {
 	long a = stack_pop();
 	long b = stack_pop();
-	long result = a & b;
-	stack_push(result);
+	stack_push(a & b);
 }
 
 void negate(void)
@@ -316,8 +317,7 @@ void or(void)
 {
 	long a = stack_pop();
 	long b = stack_pop();
-	long result = a ^ b;
-	stack_push(result);
+	stack_push(a ^ b);
 }
 
 void dup_word(void)
@@ -467,12 +467,9 @@ void dot(void)
 
 void i_word(void)
 {
-	long n;
-
-	n = rpop();
+	long n = rpop();
 	stack_push(n);
 }
-
 
 /*
  * Helper functions
