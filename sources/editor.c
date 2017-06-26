@@ -52,93 +52,80 @@ display_word(cell_t word)
 	uint8_t word_color = word & 0x0000000f;
 	//bool is_hex = false;
 	static SDL_Color color;
-	char *unpacked = unpack(word);
-	char number[21];
+	char unpacked[255]; // Let's forsee very large
 	int w, h; // text width and height
 
 	switch(word_color)
 	{
 		case 0:
-			surface = TTF_RenderText_Solid(font, unpacked, color);
+			snprintf(unpacked, 255, "%s", unpack(word));
 			TTF_SizeText(font, unpacked, &w, &h);
 			x -= w; // Go back to hide a space
 			break;
 
 		case 1:
-			surface = TTF_RenderText_Solid(font, unpacked, yellow);
-			TTF_SizeText(font, unpacked, &w, &h);
+			snprintf(unpacked, 255, "%s", unpack(word));
 			color = yellow;
 			break;
 
 		case 2:
-			snprintf(number, 20, "%d", word >> 5);
-			surface = TTF_RenderText_Solid(font, number, dark_yellow);
-			TTF_SizeText(font, number, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
 			color = dark_yellow;
 			break;
 
 		case 3:
+			snprintf(unpacked, 255, "%s", unpack(word));
 			TTF_SizeText(font, unpacked, &w, &h);
 			if (is_first_definition)
 				is_first_definition = false;
 			else
 				y += h;
-			surface = TTF_RenderText_Solid(font, unpacked, red);
 			x = 0;
 			color = red;
 			break;
 
 		case 4:
-			surface = TTF_RenderText_Solid(font, unpacked, green);
-			TTF_SizeText(font, unpacked, &w, &h);
+			snprintf(unpacked, 255, "%s", unpack(word));
 			color = green;
 			break;
 
 		case 5:
 			/*if (word & 0x10)
 				is_hex = true;*/
-			snprintf(number, 20, "%d", word >> 5);
-			surface = TTF_RenderText_Solid(font, number, dark_green);
-			TTF_SizeText(font, number, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
 			color = dark_green;
 			break;
 
 		case 6:
-			snprintf(number, 20, "%d", word >> 5);
-			surface = TTF_RenderText_Solid(font, number, green);
-			TTF_SizeText(font, number, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
 			color = green;
 			break;
 
 		case 7:
-			surface = TTF_RenderText_Solid(font, unpacked, cyan);
-			TTF_SizeText(font, unpacked, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
 			color = cyan;
 			break;
 
 		case 8:
-			snprintf(number, 20, "%d", word >> 5);
-			surface = TTF_RenderText_Solid(font, number, yellow);
-			TTF_SizeText(font, number, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
 			color = yellow;
 			break;
 
 		case 9:
 		case 0xa:
 		case 0xb:
-			surface = TTF_RenderText_Solid(font, unpacked, white);
-			TTF_SizeText(font, unpacked, &w, &h);
+			snprintf(unpacked, 255, "%s", unpack(word));
+			color = white;
 			break;
 
 		case 0xc:
-			surface = TTF_RenderText_Solid(font, unpacked, magenta);
-			TTF_SizeText(font, unpacked, &w, &h);
+			snprintf(unpacked, 255, "%s", unpack(word));
+			color = magenta;
 			break;
 
 		case 0xf:
-			snprintf(number, 20, "%d", word >> 5);
-			surface = TTF_RenderText_Solid(font, number, white);
-			TTF_SizeText(font, number, &w, &h);
+			snprintf(unpacked, 255, "%d", word >> 5);
+			color = white;
 			break;
 
 		default:
@@ -147,6 +134,9 @@ display_word(cell_t word)
 	}
 
 	int texH = 0, texW = 0;
+
+	surface = TTF_RenderText_Solid(font, unpacked, color);
+	TTF_SizeText(font, unpacked, &w, &h);
 
 	texture = SDL_CreateTextureFromSurface(renderer, surface);
 	SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
