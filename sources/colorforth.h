@@ -18,7 +18,7 @@ typedef int32_t cell_t;
 cell_t pack(const char *word_name);
 char *unpack(cell_t word);
 void run_block(const cell_t nb_block);
-void dot_s(void);
+char *dot_s(void);
 void do_word(cell_t word);
 struct word_entry *lookup_word(cell_t name, const bool force_dictionary);
 void colorforth_initialize(void);

@@ -26,16 +26,19 @@ SDL_Texture  *texture;
 
 cell_t      *blocks;
 bool         is_first_definition;
+bool         is_command = false;
+bool         is_dirty_hack = false;
 unsigned int word_index;
 int          nb_block = 0;
 
 // Globally defined for display_word() and screen_clear()
 int x = 0, y = 0;
 
-#define SPACE_BETWEEN_WORDS 7
-#define MASK 0xffffffffL
-#define INTERPRET_NUMBER_TAG 8
-#define INTERPRET_WORD_TAG 0x00000001
+#define MASK 			0xffffffffL
+#define INTERPRET_NUMBER_TAG 	8
+#define INTERPRET_WORD_TAG 	0x00000001
+#define SPACE_BETWEEN_WORDS	7
+#define WORD_MAX_LENGTH 	20
 
 static void
 cursor_display(int x, int y)
@@ -47,34 +50,50 @@ cursor_display(int x, int y)
 }
 
 static void
+display_text(char *text, SDL_Color color, int x, int y)
+{
+	int texW = 0;
+	int texH = 0;
+
+	surface = TTF_RenderText_Solid(font, text, color);
+	texture = SDL_CreateTextureFromSurface(renderer, surface);
+
+	SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
+	SDL_Rect location = {x, y, texW, texH};
+
+	SDL_RenderCopy(renderer, texture, NULL, &location);
+	SDL_RenderPresent(renderer);
+}
+
+static void
 display_word(cell_t word)
 {
 	uint8_t word_color = word & 0x0000000f;
 	//bool is_hex = false;
 	static SDL_Color color;
-	char unpacked[255]; // Let's forsee very large
+	char unpacked[WORD_MAX_LENGTH]; // Let's forsee very large
 	int w, h; // text width and height
 
 	switch(word_color)
 	{
 		case 0:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			TTF_SizeText(font, unpacked, &w, &h);
 			x -= w; // Go back to hide a space
 			break;
 
 		case 1:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			color = yellow;
 			break;
 
 		case 2:
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = dark_yellow;
 			break;
 
 		case 3:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			TTF_SizeText(font, unpacked, &w, &h);
 			if (is_first_definition)
 				is_first_definition = false;
@@ -85,46 +104,46 @@ display_word(cell_t word)
 			break;
 
 		case 4:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			color = green;
 			break;
 
 		case 5:
 			/*if (word & 0x10)
 				is_hex = true;*/
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = dark_green;
 			break;
 
 		case 6:
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = green;
 			break;
 
 		case 7:
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = cyan;
 			break;
 
 		case 8:
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = yellow;
 			break;
 
 		case 9:
 		case 0xa:
 		case 0xb:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			color = white;
 			break;
 
 		case 0xc:
-			snprintf(unpacked, 255, "%s", unpack(word));
+			snprintf(unpacked, WORD_MAX_LENGTH, "%s", unpack(word));
 			color = magenta;
 			break;
 
 		case 0xf:
-			snprintf(unpacked, 255, "%d", word >> 5);
+			snprintf(unpacked, WORD_MAX_LENGTH, "%d", word >> 5);
 			color = white;
 			break;
 
@@ -133,17 +152,9 @@ display_word(cell_t word)
 			break;
 	}
 
-	int texH = 0, texW = 0;
+	display_text(unpacked, color, x, y);
 
-	surface = TTF_RenderText_Solid(font, unpacked, color);
 	TTF_SizeText(font, unpacked, &w, &h);
-
-	texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
-
-	SDL_Rect location = {x, y, texW, texH};
-	SDL_RenderCopy(renderer, texture, NULL, &location);
-	SDL_RenderPresent(renderer);
 
 	x += w + SPACE_BETWEEN_WORDS;
 }
@@ -161,88 +172,60 @@ screen_clear(void)
 static void
 command_prompt_display(void)
 {
-	int texH = 0, texW = 0;
-
-	surface = TTF_RenderText_Solid(font, "> ", green);
-
-	texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
-
-	SDL_Rect location = {0, 560, texW, texH};
-	SDL_RenderCopy(renderer, texture, NULL, &location);
-	SDL_RenderPresent(renderer);
-
+	display_text("> ", yellow, 0, 550);
 	cursor_display(15, 562);
 }
 
 static void
 status_bar_update_block_number(cell_t n)
 {
-	int texH = 0, texW = 0;
 	char block_info[30];
 
 	snprintf(block_info, 30, "Block: %d", n);
+	display_text(block_info, yellow, 680, 560);
+}
 
-	surface = TTF_RenderText_Solid(font, block_info, green);
-
-	texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
-
-	SDL_Rect location = {680, 570, texW, texH};
-	SDL_RenderCopy(renderer, texture, NULL, &location);
-	SDL_RenderPresent(renderer);
+static void
+display_stack()
+{
+	char *stack_content = dot_s();
+	display_text(stack_content, yellow, 0, 570);
+	free(stack_content);
 }
 
 static void
 display_block(cell_t n)
 {
-	unsigned long start, limit;
-
-	start = n * 256;     // Start executing block from here...
-	limit = (n+1) * 256; // to this point.
+	unsigned long start = n * 256;     // Start executing block from here...
+	unsigned long limit = (n+1) * 256; // to this point.
 
 	screen_clear();
 
 	is_first_definition = true;
 
 	for (word_index = start; word_index < limit; word_index++)
-	{
 		display_word(blocks[word_index]);
-	}
 
 	command_prompt_display();
 	status_bar_update_block_number(n);
+	display_stack();
 }
 
 bool
-is_number(char *ptr)
+is_number(const char *ptr)
 {
 	while (*ptr++)
 	{
-		switch(*ptr)
-		{
-			case '0':
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-			case '8':
-			case '9':
-			case '\0':
-				break;
-			default:
-				return false;
-		}
+		// Allowed ones are 0 to 9 and NULL
+		if (!((*ptr >= 0x31 && *ptr <= 0x39) || *ptr == 0x00))
+			return false;
 	}
 
 	return true;
 }
 
-static void
-do_cmd(char *word)
+static int
+do_cmd(const char *word)
 {
 	cell_t packed;
 
@@ -255,34 +238,30 @@ do_cmd(char *word)
 		packed = (pack(word) & 0xfffffff0) | INTERPRET_WORD_TAG;
 
 		if (!lookup_word(packed, FORTH_DICTIONARY))
-		{
-			int texH = 0, texW = 0;
-
-			surface = TTF_RenderText_Solid(font, "Error: word not found! ", red);
-
-			texture = SDL_CreateTextureFromSurface(renderer, surface);
-			SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
-
-			SDL_Rect location = {0, 580, texW, texH};
-			SDL_RenderCopy(renderer, texture, NULL, &location);
-			SDL_RenderPresent(renderer);
-			return;
-		}
+			return -1;
 	}
 
+	if ((cell_t)(packed & 0xfffffff0) == pack("dup"))
+		is_dirty_hack = true;
+	else
+		is_dirty_hack = false;
+
 	do_word(packed);
-	dot_s();
+
+	return 0;
 }
 
 
 int
 main(void)
 {
+	char word[WORD_MAX_LENGTH];
 	bool done = SDL_FALSE;
-	char text[255];
-	int texW = 0;
-	int texH = 0;
 	char *str;
+	int status;
+	int fd;
+	struct stat sbuf;
+
 
 	SDL_Event event;
 
@@ -300,13 +279,9 @@ main(void)
 		800, 600, 0);
 	renderer = SDL_CreateRenderer(window, -1, 0);
 	font = TTF_OpenFont("GohuFont-Bold.ttf", 25);
-	SDL_Color color = white;
+	SDL_Color color = yellow;
 
-	// cf
-	int fd;
-	struct stat sbuf;
-
-	memset(text, 0, 255);
+	memset(word, 0, WORD_MAX_LENGTH);
 
 	if ((fd = open("blocks/blocks.cf", O_RDONLY)) == -1)
 	{
@@ -331,7 +306,6 @@ main(void)
 	colorforth_initialize();
 
 	display_block(0);
-	// cf
 
 	while (!done)
 	{
@@ -380,7 +354,8 @@ main(void)
 
 					case SDLK_F9:
 						x = 10;
-						y = 560;
+						y = 550;
+						is_command = true;
 						break;
 
 					case SDLK_F10:
@@ -399,30 +374,31 @@ main(void)
 						break;
 
 					case SDLK_SPACE:
-						str = rindex(text, ' ');
+						str = rindex(word, ' ');
 
 						// Get rid of a potential space
-						if (str)
-							do_cmd(str + 1);
-						else
-							do_cmd(text);
+						status = str ? do_cmd(str + 1) : do_cmd(word);
+
+						memset(word, 0, WORD_MAX_LENGTH);
+						display_block(nb_block);
+
+						if (status == -1)
+							display_text("Error: word not found!", red, 0, 585);
+
+						break;
+
+					case SDLK_UP:
+						cursor_display(x, y+10);
 						break;
 				}
 				break;
 
 			case SDL_TEXTINPUT:
-				strcat(text, event.text.text);
+				strcat(word, event.text.text);
 				break;
 		}
 
-		surface = TTF_RenderText_Solid(font, text, color);
-		texture = SDL_CreateTextureFromSurface(renderer, surface);
-
-		SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
-		SDL_Rect location = {x, y, texW, texH};
-
-		SDL_RenderCopy(renderer, texture, NULL, &location);
-		SDL_RenderPresent(renderer);
+		display_text(word, color, 10, 550);
 	}
 
 	SDL_DestroyTexture(texture);
@@ -433,7 +409,6 @@ main(void)
 	TTF_Quit();
 	SDL_Quit();
 
-	// cf
 	munmap(blocks, sbuf.st_size);
 	close(fd);
 	colorforth_finalize();

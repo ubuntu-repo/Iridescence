@@ -20,7 +20,7 @@
 #include "colorforth.h"
 
 #define CODE_HEAP_SIZE (1024 * 100)	// 100 Kb
-#define STACK_SIZE     8
+#define STACK_SIZE     42
 
 #define FORTH_TRUE -1      // In Forth world -1 means true
 #define FORTH_FALSE 0
@@ -203,10 +203,8 @@ void load(void)
 
 void loads(void)
 {
-	long i, j;
-
-	j = stack_pop();
-	i = stack_pop();
+	int j = stack_pop();
+	int i = stack_pop();
 
 	// Load blocks, excluding shadow blocks
 	for (; i <= j; i += 2)
@@ -322,10 +320,13 @@ void or(void)
 
 void dup_word(void)
 {
+	extern bool is_command;
+	extern bool is_dirty_hack;
 	long n = *tos;
 	stack_push(n);
 
-	NEXT();
+	if (is_command && !is_dirty_hack)
+		NEXT();
 }
 
 void drop(void)
@@ -353,17 +354,18 @@ void swap(void)
 	nos = top;
 }
 
-void dot_s(void)
+char *dot_s(void)
 {
-	int i, nb_items;
+	char buffer[60];
+	int pos = 0;
+	int nb_items = tos - start_of(stack);
 
-	nb_items = tos - start_of(stack);
+	memset(buffer, 0, 60);
 
-	printf("\nStack: ");
+	for (int i = 1; i < nb_items + 1; i++)
+		pos += snprintf(&buffer[pos], 60, "%d ", (int)stack[i]);
 
-	for (i = 1; i < nb_items + 1; i++)
-		printf("%d ", (int)stack[i]);
-	printf("\n");
+	return strdup(buffer);
 }
 
 void store(void)
@@ -420,6 +422,7 @@ void for_aux(void)
 {
 	long n = stack_pop();
 	rpush(n);
+	printf("FOR_AUX\n");
 
 	NEXT();
 }
@@ -437,20 +440,25 @@ void next_aux(void)
 	if (n > 0)
 	{
 		IP = (unsigned long *)addr;
+		printf("***NEXT_AUX: %lx\n", addr);
 		((FUNCTION_EXEC)*IP)();
 	}
+
+	(void)rpop();
+	(void)rpop();
 }
 
 void for_(void)
 {
 	stack_push((long)for_aux);
 	comma();
-
+printf("***FOR_ = %p\n", h);
 	rpush((long)h);
 }
 
 void next_(void)
 {
+	printf("***NEXT_\n");
 	stack_push((long)next_aux);
 	comma();
 }
@@ -512,12 +520,10 @@ do_word(const cell_t word)
 void
 run_block(const cell_t n)
 {
-	unsigned long start, limit, i;
+	unsigned long start = n * 256;     // Start executing block from here...
+	unsigned long limit = (n+1) * 256; // ...to this point.
 
-	start = n * 256;     // Start executing block from here...
-	limit = (n+1) * 256; // ...to this point.
-
-	for (i = start; i < limit-1; i++)
+	for (unsigned long i = start; i < limit-1; i++)
 		do_word(blocks[i]);
 }
 
@@ -554,7 +560,8 @@ insert_builtins_into_forth_dictionary(void)
 {
 	struct word_entry *_comma, *_load, *_loads, *_forth, *_macro,
 		*_exit, *_store, *_fetch, *_add, *_one_complement, *_mult,
-		*_div, *_ne, *_dup, *_drop, *_nip, *_negate, *_dot, *_here, *_i;
+		*_div, *_ne, *_dup, *_drop, *_nip, *_negate, *_dot, *_here, *_i,
+		*_over;
 
 	_comma		= calloc(1, sizeof(struct word_entry));
 	_load		= calloc(1, sizeof(struct word_entry));
@@ -576,11 +583,12 @@ insert_builtins_into_forth_dictionary(void)
 	_dot		= calloc(1, sizeof(struct word_entry));
 	_here		= calloc(1, sizeof(struct word_entry));
 	_i		= calloc(1, sizeof(struct word_entry));
+	_over		= calloc(1, sizeof(struct word_entry));
 
 	if (!(_comma && _load && _loads && _forth && _macro && _exit
 			&& _store && _fetch && _add && _one_complement
 			&& _mult && _div && _ne && _dup && _drop && _nip
-			&& _negate && _dot && _here && _i))
+			&& _negate && _dot && _here && _i && _over))
 	{
 		fprintf(stderr, "Error: Not enough memory!\n");
 		free(code_here);
@@ -650,6 +658,10 @@ insert_builtins_into_forth_dictionary(void)
 	_nip->code_address	= nip;
 	_nip->codeword		= &(_nip->code_address);
 
+	_over->name		= pack("over");
+	_over->code_address	= over;
+	_over->codeword		= &(_over->code_address);
+
 	_negate->name		= pack("negate");
 	_negate->code_address	= negate;
 	_negate->codeword	= &(_negate->code_address);
@@ -686,6 +698,7 @@ insert_builtins_into_forth_dictionary(void)
 	LIST_INSERT_HEAD(&forth_dictionary, _dot,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _here,		next);
 	LIST_INSERT_HEAD(&forth_dictionary, _i,			next);
+	LIST_INSERT_HEAD(&forth_dictionary, _over,		next);
 }
 
 static void
@@ -693,13 +706,13 @@ insert_builtins_into_macro_dictionary(void)
 {
 	struct word_entry *_rdrop, *_ne, *_swap, *_if, *_then, *_for, *_next;
 
-	_rdrop       = calloc(1, sizeof(struct word_entry));
-	_ne          = calloc(1, sizeof(struct word_entry));
-	_swap        = calloc(1, sizeof(struct word_entry));
-	_if          = calloc(1, sizeof(struct word_entry));
-	_then        = calloc(1, sizeof(struct word_entry));
-	_for         = calloc(1, sizeof(struct word_entry));
-	_next        = calloc(1, sizeof(struct word_entry));
+	_rdrop	= calloc(1, sizeof(struct word_entry));
+	_ne	= calloc(1, sizeof(struct word_entry));
+	_swap	= calloc(1, sizeof(struct word_entry));
+	_if	= calloc(1, sizeof(struct word_entry));
+	_then	= calloc(1, sizeof(struct word_entry));
+	_for	= calloc(1, sizeof(struct word_entry));
+	_next	= calloc(1, sizeof(struct word_entry));
 
 	if (!(_rdrop && _ne && _swap && _if && _then && _for && _next))
 	{
@@ -708,33 +721,33 @@ insert_builtins_into_macro_dictionary(void)
 		exit(EXIT_FAILURE);
 	}
 
-	_rdrop->name               = pack("rdrop");
-	_rdrop->code_address       = rdrop;
-	_rdrop->codeword           = &(_rdrop->code_address);
+	_rdrop->name		= pack("rdrop");
+	_rdrop->code_address	= rdrop;
+	_rdrop->codeword	= &(_rdrop->code_address);
 
-	_ne->name                  = pack("ne");
-	_ne->code_address          = ne;
-	_ne->codeword              = &(_ne->code_address);
+	_ne->name		= pack("ne");
+	_ne->code_address	= ne;
+	_ne->codeword		= &(_ne->code_address);
 
-	_swap->name                = pack("swap");
-	_swap->code_address        = swap;
-	_swap->codeword            = &(_swap->code_address);
+	_swap->name		= pack("swap");
+	_swap->code_address	= swap;
+	_swap->codeword		= &(_swap->code_address);
 
-	_if->name                  = pack("if");
-	_if->code_address          = if_;
-	_if->codeword              = &(_if->code_address);
+	_if->name		= pack("if");
+	_if->code_address	= if_;
+	_if->codeword		= &(_if->code_address);
 
-	_then->name                = pack("then");
-	_then->code_address        = then;
-	_then->codeword            = &(_then->code_address);
+	_then->name		= pack("then");
+	_then->code_address	= then;
+	_then->codeword		= &(_then->code_address);
 
-	_for->name                 = pack("for");
-	_for->code_address         = for_;
-	_for->codeword             = &(_for->code_address);
+	_for->name		= pack("for");
+	_for->code_address	= for_;
+	_for->codeword		= &(_for->code_address);
 
-	_next->name                = pack("next");
-	_next->code_address        = next_;
-	_next->codeword            = &(_next->code_address);
+	_next->name		= pack("next");
+	_next->code_address	= next_;
+	_next->codeword		= &(_next->code_address);
 
 	LIST_INSERT_HEAD(&macro_dictionary, _rdrop,	next);
 	LIST_INSERT_HEAD(&macro_dictionary, _ne,	next);
@@ -748,13 +761,11 @@ insert_builtins_into_macro_dictionary(void)
 void
 literal(void)
 {
-	long n;
-
 	// Skip literal's address
 	IP++;
 
 	// Fetch the number from the next cell
-	n = *(long *)IP;
+	long n = *(long *)IP;
 	n >>= 5;  // Make it a number again ;-)
 
 	// Push the number on the stack
@@ -790,9 +801,7 @@ ignore(const cell_t word)
 static void
 interpret_forth_word(const cell_t word)
 {
-	struct word_entry *entry;
-
-	entry = lookup_word(word, FORTH_DICTIONARY);
+	struct word_entry *entry = lookup_word(word, FORTH_DICTIONARY);
 
 	if (entry)
 		execute(entry);
@@ -856,9 +865,7 @@ compile_big_number(const cell_t number)
 static void
 compile_macro(const cell_t word)
 {
-	struct word_entry *entry;
-
-	entry = lookup_word(word, MACRO_DICTIONARY);
+	struct word_entry *entry = lookup_word(word, MACRO_DICTIONARY);
 
 	if (entry)
 	{
@@ -872,9 +879,7 @@ compile_macro(const cell_t word)
 static void
 create_word(cell_t word)
 {
-	struct word_entry *entry;
-
-	entry = calloc(1, sizeof(struct word_entry));
+	struct word_entry *entry = calloc(1, sizeof(struct word_entry));
 
 	if (!entry)
 	{
